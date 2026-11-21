@@ -1,0 +1,30 @@
+{
+  "publishMode": "browser",
+  "browser": {
+    "expectedUsername": "your_username",
+    "uploadTimeoutSeconds": 300
+  },
+  "api": {
+    "login": "facebook",
+    "version": "v27.0",
+    "publicVideoBaseUrl": ""
+  },
+  "schedule": {
+    "times": ["20:00"],
+    "utcOffset": "+08:00",
+    "daysAhead": 7,
+    "renderAheadHours": 24,
+    "lateGraceMinutes": 360,
+    "pollSeconds": 60
+  },
+  "video": {
+    "objects": ["kiwi", "dragonfruit", "soap"],
+    "cuts": [10, 50, 100],
+    "seconds": [5.6, 6.4, 7.6],
+    "width": 720,
+    "fps": 30
+  },
+  "caption": "{object} | {cuts} cuts. Which level is most satisfying? 🔪\n#asmr #satisfying #cutting #3danimation",
+  "shareToFeed": true,
+  "isAiGenerated": false
+}

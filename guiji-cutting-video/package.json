@@ -1,0 +1,13 @@
+{
+  "name": "guiji-cutting-publisher",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24.0.0" },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "plan": "node scripts/publish.mjs plan",
+    "start": "node scripts/publish.mjs run",
+    "status": "node scripts/publish.mjs status"
+  }
+}

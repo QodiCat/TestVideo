@@ -1,0 +1,23 @@
+# Dependencies and local rendering tools
+node_modules/
+/.render-deps/
+
+# Local environment and publisher configuration
+.env
+.env.*
+!.env.example
+publisher.json
+
+# Runtime data and logs
+data/
+output/
+*.log
+
+# Generated videos and preview images in the project root
+/*.mp4
+/preview-*.jpg
+/verification.jpg
+
+# Operating system files
+.DS_Store
+Thumbs.db
