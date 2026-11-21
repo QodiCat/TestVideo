@@ -202,3 +202,16 @@ export function retryBrowserJob(job, store) {
   for (const key of ['error', 'errorStage', 'errorType', 'retryAt', 'errorScreenshot']) delete job[key];
   store.save(job);
 }
+
+// Explicit single-post action: publish this ready video now, regardless of its scheduled time.
+// No readline prompts or manual approval screen. Other queued jobs are left alone.
+export async function publishBrowserNow(id, store, browser) {
+  const job = store.get(id);
+  if (!job) throw new Error('没有找到任务：' + id);
+  if (job.status === 'published') return job;
+  if (job.status !== 'ready' || job.containerId || job.browserShareStartedAt) {
+    throw new Error('立即发布需要尚未分享的 ready 任务；准备阶段失败可先运行 retry');
+  }
+  await submitBrowserJob(job, store, browser);
+  return job;
+}

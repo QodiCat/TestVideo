@@ -2,6 +2,14 @@
 
 ## 浏览器 GUI 发布（默认，无需 token）
 
+**直接自动发布一条 ready 视频（不等待人工检查、Enter 或排期时间）：**
+
+```powershell
+node scripts/publish.mjs browser-publish 任务ID
+```
+
+该命令会使用 Edge 上传视频、自动裁剪并填写文案、直接点击“分享”，收到成功提示后记录为 published 并退出。它只处理指定任务，已经成功的任务再次执行会跳过，不会重复分享。`browser-preview` 仍用于主动预览，按设计不会点击分享。首次登录仍使用 `browser-login`；已有登录会话则直接发布。单条命令独立于排期队列的暂停状态，但遇到本次实际错误仍会保存截图和错误步骤。
+
 浏览器模式固定使用 Microsoft Edge，通过 Instagram 网页上传本地 MP4、填写文案并分享。使用独立的 Edge 配置目录 `data/instagram-edge` 保存登录状态，不读取日常浏览器的会话。该目录包含敏感登录数据，不要上传或分享。程序自动查找 Edge；自定义安装位置可在 `.env` 设置 `GUIJI_EDGE` 为 `msedge.exe` 的绝对路径，发布时不会回退到 Chrome。原 `data/instagram-browser` 登录数据保留，切换 Edge 后需重新运行 `browser-login` 登录一次。
 
 1. 在 `publisher.json` 设置 `"publishMode": "browser"`，并配置：

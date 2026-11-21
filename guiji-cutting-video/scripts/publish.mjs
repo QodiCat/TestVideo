@@ -6,7 +6,7 @@ import { createInterface } from 'node:readline/promises';
 import { createHash } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { loadEnv, validateConfig, Store, acquireLock, Instagram, publishReady, reconcile } from './publisher-core.mjs';
-import { BrowserInstagram, browserRuntime, submitBrowserJob, retryBrowserJob } from './browser-publisher.mjs';
+import { BrowserInstagram, browserRuntime, submitBrowserJob, retryBrowserJob, publishBrowserNow } from './browser-publisher.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 loadEnv(join(root, '.env'));
@@ -135,6 +135,7 @@ async function main() {
   doctor [--live]       检查本地依赖；--live 额外核对登录账号
   browser-login         打开独立浏览器，手动登录并保存会话
   browser-preview <ID>   走到分享前并截图，不点击分享；需要 ready 任务
+  browser-publish <ID>   立即自动发布这一条视频，自动点击分享，不等待人工检查
   enqueue <MP4> --at <带时区的ISO时间> --caption <文案>
                         将已有竖屏视频加入排期
   resolve <ID> --published | --skip
@@ -150,7 +151,7 @@ async function main() {
     }
     console.log('已创建 publisher.json 和 .env；编辑配置后执行 plan。'); return;
   }
-  if (!['plan', 'status', 'prepare', 'run', 'doctor', 'cancel', 'browser-login', 'browser-preview', 'enqueue', 'resolve', 'retry'].includes(command)) throw new Error('未知命令；使用 help 查看帮助');
+  if (!['plan', 'status', 'prepare', 'run', 'doctor', 'cancel', 'browser-login', 'browser-preview', 'browser-publish', 'enqueue', 'resolve', 'retry'].includes(command)) throw new Error('未知命令；使用 help 查看帮助');
   if (!existsSync(join(root, 'publisher.json'))) throw new Error('请先执行 node scripts/publish.mjs init');
   const config = validateConfig(JSON.parse(readFileSync(join(root, 'publisher.json'), 'utf8').replace(/^\uFEFF/, '')));
   if (command === 'doctor') {
@@ -182,7 +183,17 @@ async function main() {
   const release = command === 'status' ? () => {} : acquireLock(root);
   const store = new Store(root);
   try {
-    if (['browser-login', 'browser-preview'].includes(command)) {
+    if (command === 'browser-publish') {
+      if (config.publishMode !== 'browser') throw new Error('请将 publishMode 设为 browser');
+      const browser = new BrowserInstagram(config, root);
+      try {
+        console.log('自动发布任务 ' + args[0] + '：上传、填写文案后直接点击分享，无需按 Enter。');
+        const job = await publishBrowserNow(args[0], store, browser);
+        log(job.status, { id: job.id, stage: job.errorStage, screenshot: job.errorScreenshot ?? job.previewScreenshot });
+        if (job.status !== 'published') throw new Error(job.error + '；截图：' + (job.errorScreenshot ?? '未保存'));
+        console.log('发布成功：' + job.id);
+      } finally { await browser.close(); }
+    } else if (['browser-login', 'browser-preview'].includes(command)) {
       if (config.publishMode !== 'browser') throw new Error('请先将 publishMode 设为 browser 并配置 browser.expectedUsername');
       if (!process.stdin.isTTY) throw new Error('请在交互式终端运行此命令，以便手动登录或确认预览');
       const browser = new BrowserInstagram(config, root);

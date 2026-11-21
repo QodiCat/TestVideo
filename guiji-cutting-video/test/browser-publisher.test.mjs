@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Store, validateConfig } from '../scripts/publisher-core.mjs';
-import { BrowserInstagram, browserRuntime, submitBrowserJob, retryBrowserJob } from '../scripts/browser-publisher.mjs';
+import { BrowserInstagram, browserRuntime, submitBrowserJob, retryBrowserJob, publishBrowserNow } from '../scripts/browser-publisher.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const config = () => JSON.parse(readFileSync(join(root, 'publisher.example.json'), 'utf8'));
@@ -65,6 +65,15 @@ test('仅准备阶段失败可以重试；点击分享后不确定的任务禁�
   job.error = '浏览器发布准备失败，测试'; job.containerId = '123';
   assert.throws(() => retryBrowserJob(job, store));
 });
+test('单条立即发布不等排期、不需交互；成功任务再次执行不会重复分享', async t => {
+  const { store, job } = fixture(t); let shares = 0;
+  job.scheduled = '2099-01-01T00:00:00.000Z'; store.save(job);
+  const browser = { prepare: async () => {}, share: async () => { shares++; return { confirmed: true }; } };
+  const result = await publishBrowserNow(job.id, store, browser);
+  assert.equal(result.status, 'published'); assert.equal(shares, 1);
+  await publishBrowserNow(job.id, store, browser); assert.equal(shares, 1);
+  await assert.rejects(() => publishBrowserNow('missing', store, browser));
+});
 
 // Real Chromium DOM test. Every request is fulfilled locally; no Instagram traffic or posts.
 const fixtureHTML = `<!doctype html><html><body>
@@ -94,8 +103,9 @@ test('真实 Edge DOM：Post、裁剪、Next 和 Share 都无按钮角色时完�
   assert.equal(await browser.page.evaluate(() => window.original), true);
   assert.equal(await browser.page.getByRole('textbox').innerText(), job.caption);
   assert.equal(await browser.page.locator('input[type=file]').evaluate(e => e.files[0].name), 'video.mp4');
-  // submitBrowserJob prepares afresh, then commits only after visible success.
-  await submitBrowserJob(job, store, browser);
+  // Immediate publishing drives the same full UI without stdin/Enter or scheduling waits.
+  store.save(job);
+  await publishBrowserNow(job.id, store, browser);
   assert.equal(await browser.page.evaluate(() => window.shares), 1);
   assert.equal(store.get(job.id).status, 'published');
   // A click without success UI must never be treated as success.
