@@ -20,22 +20,22 @@ if (!process.env.GUIJI_CUTTING_DEPS && existsSync(join(root, '..', '.render-deps
 }
 const [command = 'help', ...args] = process.argv.slice(2);
 const live = args.includes('--live');
-const log = (event, details = {}) => {
+const log = (event, details = {}, workRoot=root) => {
   const entry = { at: new Date().toISOString(), event, ...details };
-  mkdirSync(join(root, 'data'), { recursive: true });
-  appendFileSync(join(root, 'data', 'events.jsonl'), JSON.stringify(entry) + '\n');
+  mkdirSync(join(workRoot, 'data'), { recursive: true });
+  appendFileSync(join(workRoot, 'data', 'events.jsonl'), JSON.stringify(entry) + '\n');
   console.log(JSON.stringify(entry));
 };
-function child(exe, args, capture = false) {
+function child(exe, args, capture = false, workRoot=root) {
   return new Promise((res, rej) => {
-    const p = spawn(exe, args, { cwd: root, windowsHide: true, stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit' });
+    const p = spawn(exe, args, { cwd: workRoot, windowsHide: true, stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit' });
     let output = '';
     if (capture) p.stdout.on('data', data => { output += data; });
     p.on('error', rej);
     p.on('exit', code => code === 0 ? res(output) : rej(new Error(exe + ' 退出码 ' + code)));
   });
 }
-async function probe(file) {
+export async function probe(file) {
   const data = JSON.parse(await child('ffprobe', ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file], true));
   const video = data.streams.find(s => s.codec_type === 'video');
   const audio = data.streams.find(s => s.codec_type === 'audio');
@@ -43,22 +43,22 @@ async function probe(file) {
     throw new Error('视频检查失败：需要竖屏 9:16、H.264、AAC，且至少 3 秒');
   }
 }
-async function render(job, store) {
-  const file = join(root, 'output', job.id + '.mp4');
+export async function render(job, store, workRoot=root) {
+  const file = join(workRoot, 'output', job.id + '.mp4');
   mkdirSync(dirname(file), { recursive: true });
   if (!existsSync(file)) {
-    const spec = join(root, 'output', job.id + '.json');
+    const spec = join(workRoot, 'output', job.id + '.json');
     // Job configuration is immutable once queued; output is renamed only after verification.
     const { writeFileSync } = await import('node:fs');
     writeFileSync(spec, JSON.stringify(job.video, null, 2));
-    const temporary = join(root, 'output', job.id + '.rendering.mp4');
+    const temporary = join(workRoot, 'output', job.id + '.rendering.mp4');
     if (existsSync(temporary)) unlinkSync(temporary);
-    await child(process.execPath, [join(root, 'scripts', 'render.mjs'), spec, temporary]);
+    await child(process.execPath, [join(workRoot, 'scripts', 'render.mjs'), spec, temporary],false,workRoot);
     await probe(temporary);
     renameSync(temporary, file);
   } else await probe(file);
   job.status = 'ready'; job.file = file; store.save(job);
-  log('video_ready', { id: job.id, file });
+  log('video_ready', { id: job.id, file },workRoot);
 }
 
 async function tick(config, store, api, prepareOnly = false) {
@@ -66,6 +66,7 @@ async function tick(config, store, api, prepareOnly = false) {
   if (added) log('planned', { added });
   for (const job of store.all()) {
     if (['published', 'needs_review', 'skipped', 'cancelled'].includes(job.status)) continue;
+    if(job.manualPublishRequestedAt){job.status='needs_review';job.error='上次立即发布被中断，请核对结果后处理，禁止自动重发';store.save(job);continue;}
     if (api instanceof BrowserInstagram) {
       if (api.paused) { console.log('浏览器发布已暂停，请检查 data/browser-paused.json 并运行 browser-login。'); break; }
       if (['gui_publishing', 'gui_uncertain'].includes(job.status)) {
@@ -280,4 +281,4 @@ async function main() {
     }
   } finally { store.close(); release(); }
 }
-main().catch(error => { console.error(error.message); process.exitCode = 1; });
+if(process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url))main().catch(error => { console.error(error.message); process.exitCode = 1; });

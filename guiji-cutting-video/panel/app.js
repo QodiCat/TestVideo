@@ -58,7 +58,7 @@ function renderQueue(){
   const rows=state.jobs.filter(j=>filter==='all'||filter==='published'&&j.status==='published'||filter==='upcoming'&&isUpcoming(j)||filter==='issues'&&['needs_review','gui_uncertain','uncertain'].includes(j.status));
   rows.sort((a,b)=>isUpcoming(a)&&isUpcoming(b)?Date.parse(a.scheduled)-Date.parse(b.scheduled):isUpcoming(a)?-1:isUpcoming(b)?1:Date.parse(b.scheduled)-Date.parse(a.scheduled));
   const pages=Math.max(1,Math.ceil(rows.length/10));queuePage=Math.min(queuePage,pages-1);
-  $('#queue-body').innerHTML=rows.slice(queuePage*10,queuePage*10+10).map(j=>`<tr><td>${esc(j.name)}</td><td>${formatTime(j.scheduled)}</td><td><span class="status-badge ${esc(j.status)}">${esc(labels[j.status]??j.status)}</span></td><td>${esc(j.error??(j.status==='published'?'已记录分享成功':j.status==='queued'?'按备片窗口自动生成':j.status==='ready'?'等待计划发布时间':'—'))}</td><td>${j.hasVideo?`<button type="button" class="text-button" data-video="${j.id}">预览</button>`:''}${['queued','ready'].includes(j.status)?`<button type="button" class="text-button" data-job="${j.id}" data-action="cancel">取消</button>`:''}${j.canRetry?`<button type="button" class="text-button" data-job="${j.id}" data-action="retry">恢复备片</button>`:''}</td></tr>`).join('');
+  $('#queue-body').innerHTML=rows.slice(queuePage*10,queuePage*10+10).map(j=>`<tr><td>${esc(j.name)}</td><td>${formatTime(j.scheduled)}</td><td><span class="status-badge ${esc(j.status)}">${esc(labels[j.status]??j.status)}</span></td><td>${esc(j.error??(j.publishedEarly?'已提前发布，原计划不会重复发布':j.status==='published'?'已记录分享成功':j.status==='queued'?'按备片窗口自动生成':j.status==='ready'?'等待计划发布时间':'—'))}</td><td>${j.canPublishNow?`<button type="button" class="text-button publish-now" data-publish-now="${j.id}" title="立刻生成并发布此任务，不等待原计划时间" ${state.operation||state.loginOpen||state.workerLocked?'disabled':''}>立即发布</button>`:''}${j.hasVideo?`<button type="button" class="text-button" data-video="${j.id}">预览</button>`:''}${['queued','ready'].includes(j.status)?`<button type="button" class="text-button" data-job="${j.id}" data-action="cancel">取消</button>`:''}${j.canRetry?`<button type="button" class="text-button" data-job="${j.id}" data-action="retry">恢复备片</button>`:''}</td></tr>`).join('');
   $('#queue-page').textContent=`${queuePage+1} / ${pages} 页 · 共 ${rows.length} 条`;
   $('#queue-prev').disabled=queuePage===0;$('#queue-next').disabled=queuePage===pages-1;
   $('#empty-queue').hidden=!!rows.length;
@@ -79,8 +79,9 @@ function renderStatus(){
   $('#stat-pool').textContent=s.objects.length;$('#stat-strategy').textContent=strategies[s.strategy];
   $('#stat-next').textContent=state.next?formatTime(state.next.scheduled):'尚未排期';
   $('#stat-next-object').textContent=state.next?((state.catalog.find(o=>o.id===state.next.video?.object)?.name??'本地视频')+' · UTC'+s.utcOffset):'保存设置后生成计划';
-  $('#engine-message').textContent=state.loginOpen?(existing?'已连接你的 Edge，请确认 Instagram 登录正确后点击“验证当前账号”。':'登录窗口已打开，完成登录和验证后，点击“已登录，验证并保存”。'):busy?'正在运行：'+({prepare:'生成视频',run:'自动发布轮询',doctor:'检查账号',plan:'更新排期'}[state.operation.command]??state.operation.command):state.workerLocked?'检测到其他发布任务正在使用引擎。':existing?'连接已有 Edge · '+(s.cdpEndpoint==='auto'?'自动检测端口':s.cdpEndpoint)+'。发布时请保持 Edge 和面板服务运行。':'使用专用 Edge 会话。电脑需开机，面板服务需保持运行。';
-  $('#login').hidden=state.loginOpen;$('#verify-login').hidden=!state.loginOpen;$('#close-login').hidden=!state.loginOpen;
+  $('#engine-message').textContent=state.loginOpen?(existing?'已连接你的 Edge，请确认 Instagram 登录正确后点击“验证当前账号”。':'登录窗口已打开，完成登录和验证后，点击“已登录，验证并保存”。'):busy?'正在运行：'+({prepare:'生成视频',run:'自动发布轮询',doctor:'检查账号','publish-now':'生成并提前发布选中任务',plan:'更新排期'}[state.operation.command]??state.operation.command):state.workerLocked?'检测到其他发布任务正在使用引擎。':state.browserConnected?'Edge 连接保持中，同一连接内复用调试授权；浏览器或服务重启后可能需要重新允许。':existing?'连接已有 Edge · '+(s.cdpEndpoint==='auto'?'自动检测端口':s.cdpEndpoint)+'。发布时请保持 Edge 和面板服务运行。':'使用专用 Edge 会话。电脑需开机，面板服务需保持运行。';
+  $('#login').hidden=state.loginOpen||state.browserConnected;$('#verify-login').hidden=!state.loginOpen;$('#close-login').hidden=!state.loginOpen&&!state.browserConnected;
+  $('#close-login').disabled=busy;$('#verify-login').disabled=busy;
   for(const id of ['#doctor','#prepare','#login','#save'])$(id).disabled=busy||state.loginOpen||state.workerLocked;
   $('#result-card').hidden=!state.lastResult;
   if(state.lastResult){$('#result-status').textContent=state.lastResult.code===0?'执行成功':'需要处理';$('#result-status').className='badge '+(state.lastResult.code===0?'success':'warning');$('#result-output').textContent=state.lastResult.output??'';}
@@ -90,7 +91,7 @@ async function refresh(force=false){
   if(refreshing)return;refreshing=true;
   try{
     state=await api('state');
-    if(state.apiVersion!==3 || !['existing','dedicated'].includes(state.settings?.connectionMode) || typeof state.settings?.cdpEndpoint!=='string'){
+    if(state.apiVersion!==4 || !['existing','dedicated'].includes(state.settings?.connectionMode) || typeof state.settings?.cdpEndpoint!=='string'){
       versionMismatch=true;hydrate(state.settings);renderStatus();
       $('#alert').hidden=false;$('#alert').textContent='后台版本较旧：请关闭面板服务窗口，重新双击 open-panel.cmd 启动，再刷新页面。当前无法保存连接设置。';
       $('#save-state').textContent='后台需要重启，设置尚未同步';$('#save-state').classList.add('dirty');
@@ -130,6 +131,8 @@ $('#close-login').onclick=()=>{void perform($('#close-login'),async()=>{await ap
 $('#queue-filter').onchange=()=>{queuePage=0;renderQueue();};
 $('#queue-prev').onclick=()=>{queuePage--;renderQueue();};$('#queue-next').onclick=()=>{queuePage++;renderQueue();};
 $('#queue-body').onclick=event=>{
+  const immediate=event.target.closest('[data-publish-now]');
+  if(immediate){void perform(immediate,async()=>{const result=await api('publish-now',{id:immediate.dataset.publishNow});toast(result.alreadyPublished?'此任务已经发布，不会重复分享':'已开始执行：先备片，再提前发布这一条任务');});return;}
   const video=event.target.closest('[data-video]');if(video){$('#video-dialog video').src='/media/'+video.dataset.video;$('#video-dialog').showModal();return;}
   const button=event.target.closest('[data-job]');if(button)void perform(button,async()=>{await api('job',{id:button.dataset.job,action:button.dataset.action});toast(button.dataset.action==='cancel'?'任务已取消':'已恢复待发布状态；如队列暂停，还需验证账号');});
 };

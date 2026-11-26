@@ -107,7 +107,7 @@ export class Store {
   }
   replaceFuture(now=new Date()) {
     const all=this.all();
-    const removed=all.filter(j=>Date.parse(j.scheduled)>now.getTime() && ['queued','ready'].includes(j.status) && j.video && !j.containerId && !j.browserShareStartedAt);
+    const removed=all.filter(j=>Date.parse(j.scheduled)>now.getTime() && ['queued','ready'].includes(j.status) && j.video && !j.containerId && !j.browserShareStartedAt && !j.manualPublishRequestedAt);
     const ids=new Set(removed.map(j=>j.id));
     for(const key of new Set(removed.map(j=>j.cycleKey).filter(Boolean))) {
       const first=Math.min(...removed.filter(j=>j.cycleKey===key).map(j=>j.cycleSequence));

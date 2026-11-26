@@ -73,7 +73,10 @@ test('real Edge CDP attachment reuses Instagram tab and login context; disconnec
     assert.equal(await app.verifyAccount(),'your_username');
     await app.close();assert.equal(unrelated.isClosed(),false);assert.equal(instagram.isClosed(),false);assert.equal(owner.pages().length,2);
     assert.equal(await unrelated.title(),'Unrelated tab');assert.equal(await instagram.title(),'Local Instagram fixture');
-    await app.open();assert.equal(app.context.pages().length,2);await app.close();
+    await app.open();assert.equal(app.context.pages().length,2);
+    const retainedConnection=app.attachedBrowser;
+    await app.page.close();assert.equal(app.isConnected,true);await app.open();assert.equal(app.attachedBrowser,retainedConnection);assert.equal(app.context.pages().length,2);
+    await app.close();
     // Connect directly through the ActivePort WebSocket with HTTP discovery disabled.
     const websocket=discoverEdgeEndpoint(profile);
     const {endpoint}=await inspectEdge('http://127.0.0.1:'+port);

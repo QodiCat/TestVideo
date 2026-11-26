@@ -41,12 +41,20 @@ export class BrowserInstagram {
     this.pausePath = join(root, 'data', 'browser-paused.json');
   }
   get paused() { return existsSync(this.pausePath); }
+  get isConnected() { return !!this.context && (this.attachedBrowser ? this.attachedBrowser.isConnected() : !!this.page && !this.page.isClosed()); }
   pause(reason) {
     mkdirSync(join(this.root, 'data'), { recursive: true });
     writeFileSync(this.pausePath, JSON.stringify({ at: new Date().toISOString(), reason }, null, 2));
   }
   resume() { if (this.paused) unlinkSync(this.pausePath); }
   async open() {
+    if(this.attachedBrowser?.isConnected() && this.context){
+      if(!this.page || this.page.isClosed()){
+        this.page=this.context.pages().find(page=>{try{return ['www.instagram.com','instagram.com'].includes(new URL(page.url()).hostname);}catch{return false;}}) ?? await this.context.newPage();
+        this.page.setDefaultTimeout(15000);
+      }
+      return;
+    }
     if (this.context && this.page && !this.page.isClosed()) return;
     if (this.context) await this.close();
     const { chromium, executablePath } = browserRuntime(this.root);
@@ -173,10 +181,10 @@ export class BrowserInstagram {
     if (!await this.shareButton.isEnabled()) throw new Error('分享按钮尚不可用');
     return this.screenshot(job.id, 'preview');
   }
-  async share() {
+  async share({manual=false}={}) {
     const { readFileSync } = await import('node:fs');
     const configPath=join(this.root,'publisher.json');
-    if(existsSync(configPath) && JSON.parse(readFileSync(configPath,'utf8').replace(/^\uFEFF/,'')).automation?.enabled===false) { const error=new Error('自动发布已关闭');error.code='AUTOMATION_DISABLED';throw error; }
+    if(!manual && existsSync(configPath) && JSON.parse(readFileSync(configPath,'utf8').replace(/^\uFEFF/,'')).automation?.enabled===false) { const error=new Error('自动发布已关闭');error.code='AUTOMATION_DISABLED';throw error; }
     await this.guard();
     this.stage = 'share';
     await this.shareButton.click();
@@ -188,7 +196,7 @@ export class BrowserInstagram {
 }
 
 // Persist BEFORE clicking Share. A crash/timeout after this point is never replayed.
-export async function submitBrowserJob(job, store, browser) {
+export async function submitBrowserJob(job, store, browser, {manual=false}={}) {
   if (['gui_publishing', 'gui_uncertain'].includes(job.status)) {
     job.status = 'needs_review'; job.error = '上次浏览器分享结果不明确，请在 Instagram 核对，禁止自动重发';
     store.save(job); browser.pause(job.error); return;
@@ -201,7 +209,7 @@ export async function submitBrowserJob(job, store, browser) {
     job.previewScreenshot = await browser.prepare(job);
     job.browserShareStartedAt = new Date().toISOString();
     job.status = 'gui_publishing'; store.save(job);
-    const result = await browser.share();
+    const result = await browser.share({manual});
     if (result?.confirmed !== true) throw new Error('未收到网页分享成功提示');
     job.status = 'published'; job.publishedAt = new Date().toISOString(); job.transport = 'browser';
     delete job.error; store.save(job);
