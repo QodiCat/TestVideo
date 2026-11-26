@@ -22,7 +22,7 @@ export function validateConfig(c) {
   if (!['api', 'browser'].includes(c.publishMode)) fail('publishMode 应为 api 或 browser');
   if (c.publishMode === 'browser') {
     if(c.browser?.connectionMode!==undefined && !['dedicated','existing'].includes(c.browser.connectionMode))fail('未知 Edge 连接方式');
-    if(c.browser?.connectionMode==='existing')localCdpEndpoint(c.browser.cdpEndpoint);
+    if(c.browser?.connectionMode==='existing' && c.browser.cdpEndpoint!=='auto')localCdpEndpoint(c.browser.cdpEndpoint);
     if (!/^[A-Za-z0-9._]{1,30}$/.test(c.browser?.expectedUsername ?? '')) fail('browser.expectedUsername 需要填写目标 Instagram 用户名');
     if (!Number.isInteger(c.browser.uploadTimeoutSeconds) || c.browser.uploadTimeoutSeconds < 30 || c.browser.uploadTimeoutSeconds > 900) fail('browser.uploadTimeoutSeconds 应为 30–900');
   }

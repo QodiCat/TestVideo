@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,rmSync,readFileSync,existsSync} from 'node:fs';
+import {mkdtempSync,rmSync,readFileSync,existsSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createServer} from 'node:http';
-import {localCdpEndpoint,inspectEdge} from '../scripts/edge-connection.mjs';
+import {localCdpEndpoint,inspectEdge,discoverEdgeEndpoint} from '../scripts/edge-connection.mjs';
 import {BrowserInstagram,browserRuntime} from '../scripts/browser-publisher.mjs';
 import {validateConfig} from '../scripts/publisher-core.mjs';
 
@@ -17,6 +17,18 @@ test('existing Edge connection only accepts local HTTP endpoints without credent
   assert.equal(localCdpEndpoint('http://localhost:9222/'),'http://localhost:9222');
   const c=config();c.browser.connectionMode='existing';c.browser.cdpEndpoint='http://127.0.0.1:9222';assert.doesNotThrow(()=>validateConfig(c));
   c.browser.cdpEndpoint='http://example.com:9222';assert.throws(()=>validateConfig(c));
+  c.browser.cdpEndpoint='auto';assert.doesNotThrow(()=>validateConfig(c));
+});
+
+test('auto detection reads the consent-enabled port file and rejects invalid records',()=>{
+  const root=mkdtempSync(join(tmpdir(),'guiji-port-discovery-test-'));
+  try{
+    assert.throws(()=>discoverEdgeEndpoint(root),/edge:\/\/inspect/);
+    writeFileSync(join(root,'DevToolsActivePort'),'53128\n/devtools/browser/a1b2-c3d4\n');assert.equal(discoverEdgeEndpoint(root),'http://127.0.0.1:53128');
+    for(const data of ['0\n/devtools/browser/test','65536\n/devtools/browser/test','9222\nws://example.com/browser','not-a-port\n/devtools/browser/test']){
+      writeFileSync(join(root,'DevToolsActivePort'),data);assert.throws(()=>discoverEdgeEndpoint(root),/无效/);
+    }
+  }finally{rmSync(root,{recursive:true,force:true});}
 });
 
 test('discovery rejects non-Edge and remote websocket redirects',async()=>{

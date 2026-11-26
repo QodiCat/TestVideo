@@ -27,7 +27,7 @@ function hydrate(s){
 function connectionHelp(){
   const existing=$('#connection-mode').value==='existing';
   $('#cdp-endpoint').disabled=!existing;
-  $('#connection-help').textContent=existing?'先用调试端口启动本机 Edge，并登录 Instagram。连接地址的 /json/version 应可打开；发布结束后只断开连接，保留浏览器。':'使用项目专用的 Edge 登录资料，登录一次后持续保存。';
+  $('#connection-help').textContent=existing?'在当前 Edge 打开 edge://inspect/#remote-debugging，勾选允许远程调试。地址填写 auto 自动检测端口；如 Edge 弹出连接授权，请手动确认。发布结束保留浏览器。':'使用项目专用的 Edge 登录资料，登录一次后持续保存。';
 }
 function objectImage(item){
   const solid=item.shape==='box'?`<path d="M14 31 62 18 106 33 58 48Z" fill="${item.peel}"/><path d="M14 31 58 48 58 74 14 57Z" fill="${item.peel}"/><path d="M58 48 106 33 106 59 58 74Z" fill="${item.flesh}" opacity=".95"/>`:item.shape==='cylinder'?`<path d="M25 35V61C25 81 95 81 95 61V35Z" fill="${item.peel}"/><ellipse cx="60" cy="35" rx="35" ry="16" fill="${item.flesh}"/>`:`<ellipse cx="60" cy="49" rx="37" ry="28" fill="${item.peel}"/><ellipse cx="70" cy="46" rx="24" ry="24" fill="${item.flesh}"/><ellipse cx="71" cy="44" rx="17" ry="18" fill="${item.peel}" opacity=".08"/>`;
@@ -79,7 +79,7 @@ function renderStatus(){
   $('#stat-pool').textContent=s.objects.length;$('#stat-strategy').textContent=strategies[s.strategy];
   $('#stat-next').textContent=state.next?formatTime(state.next.scheduled):'尚未排期';
   $('#stat-next-object').textContent=state.next?((state.catalog.find(o=>o.id===state.next.video?.object)?.name??'本地视频')+' · UTC'+s.utcOffset):'保存设置后生成计划';
-  $('#engine-message').textContent=state.loginOpen?(existing?'已连接你的 Edge，请确认 Instagram 登录正确后点击“验证当前账号”。':'登录窗口已打开，完成登录和验证后，点击“已登录，验证并保存”。'):busy?'正在运行：'+({prepare:'生成视频',run:'自动发布轮询',doctor:'检查账号',plan:'更新排期'}[state.operation.command]??state.operation.command):state.workerLocked?'检测到其他发布任务正在使用引擎。':existing?'连接已有 Edge · '+s.cdpEndpoint+'。发布时请保持 Edge 和面板服务运行。':'使用专用 Edge 会话。电脑需开机，面板服务需保持运行。';
+  $('#engine-message').textContent=state.loginOpen?(existing?'已连接你的 Edge，请确认 Instagram 登录正确后点击“验证当前账号”。':'登录窗口已打开，完成登录和验证后，点击“已登录，验证并保存”。'):busy?'正在运行：'+({prepare:'生成视频',run:'自动发布轮询',doctor:'检查账号',plan:'更新排期'}[state.operation.command]??state.operation.command):state.workerLocked?'检测到其他发布任务正在使用引擎。':existing?'连接已有 Edge · '+(s.cdpEndpoint==='auto'?'自动检测端口':s.cdpEndpoint)+'。发布时请保持 Edge 和面板服务运行。':'使用专用 Edge 会话。电脑需开机，面板服务需保持运行。';
   $('#login').hidden=state.loginOpen;$('#verify-login').hidden=!state.loginOpen;$('#close-login').hidden=!state.loginOpen;
   for(const id of ['#doctor','#prepare','#login','#save'])$(id).disabled=busy||state.loginOpen||state.workerLocked;
   $('#result-card').hidden=!state.lastResult;

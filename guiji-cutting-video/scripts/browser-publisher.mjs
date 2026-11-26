@@ -51,9 +51,9 @@ export class BrowserInstagram {
     if (this.context) await this.close();
     const { chromium, executablePath } = browserRuntime(this.root);
     if(this.config.browser.connectionMode==='existing') {
-      const {endpoint}=await inspectEdge(this.config.browser.cdpEndpoint);
+      const {endpoint}=await inspectEdge(this.config.browser.cdpEndpoint ?? 'auto');
       try {
-        this.attachedBrowser=await chromium.connectOverCDP(endpoint,{timeout:10000});
+        this.attachedBrowser=await chromium.connectOverCDP(endpoint,{timeout:60000});
         this.context=this.attachedBrowser.contexts()[0];
         if(!this.context)throw new Error('没有可用的 Edge 会话');
         const instagramPage=this.context.pages().find(page=>{try{return ['www.instagram.com','instagram.com'].includes(new URL(page.url()).hostname);}catch{return false;}});

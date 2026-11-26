@@ -1,5 +1,17 @@
 # 自动生成、排期与 Instagram 发布
 
+## 复用日常 Edge：新版浏览器的正确入口
+
+默认个人资料请在当前 Edge 地址栏打开 `edge://inspect/#remote-debugging`，勾选 **Allow remote debugging for this browser instance**（允许对此浏览器实例进行远程调试）。新版 Edge 对默认个人资料不再支持仅加 `--remote-debugging-port=9222` 的方式；参数出现在进程中，也不代表会监听 9222。
+
+先关闭面板自动发布并重启面板服务。在“视频参数与发布账号”选择“连接已有 Edge”，本机连接地址填写 **`auto`**，保存设置，再点击“连接已有 Edge”及“验证当前账号”。如果 Edge 出现连接授权提示，由用户确认。核对账号成功后再开启自动发布。
+
+`auto` 仅从当前 Windows 用户的 `%LOCALAPPDATA%/Microsoft/Edge/User Data/DevToolsActivePort` 读取启用后的调试端口，端口可能不是 9222；随后核验实际端口服务属于 Edge。程序不复制个人资料或 Cookie，不会主动开启调试权限，断开连接后保留窗口和标签页。使用完毕可以取消 Edge 中的调试许可。
+
+也兼容手动填写 `http://127.0.0.1:9222` 等本机地址，但必须确认该端口实际开启。旧配置默认仍是项目专用 Edge，与“连接已有 Edge”是两种模式。
+
+参考：[微软文档：通过 edge://inspect 启用默认浏览器调试](https://learn.microsoft.com/en-us/microsoft-edge/web-ai/devtools-mcp-server#option-b-use-edgeinspect-to-enable-remote-debugging)。
+
 ## 浏览器 GUI 发布（默认，无需 token）
 
 **直接自动发布一条 ready 视频（不等待人工检查、Enter 或排期时间）：**

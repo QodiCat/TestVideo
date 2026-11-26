@@ -26,7 +26,7 @@ export function createPanel({root=sourceRoot,runCommand,autoTick=true}={}) {
   const config=()=>validateConfig(readJSON(configPath));
   const withStore=fn=>{const store=new Store(root);try{return fn(store);}finally{store.close();}};
   const view=c=>({username:c.browser?.expectedUsername ?? '',enabled:c.automation?.enabled===true,
-    connectionMode:c.browser?.connectionMode ?? 'dedicated',cdpEndpoint:c.browser?.cdpEndpoint ?? 'http://127.0.0.1:9222',
+    connectionMode:c.browser?.connectionMode ?? 'dedicated',cdpEndpoint:c.browser?.cdpEndpoint ?? 'auto',
     times:[...c.schedule.times].sort(),utcOffset:c.schedule.utcOffset,daysAhead:c.schedule.daysAhead,
     renderAheadHours:c.schedule.renderAheadHours,lateGraceMinutes:c.schedule.lateGraceMinutes,
     strategy:c.video.strategy ?? 'random',objects:c.video.strategy==='cycle_all'?[...objectIds]:c.video.objects,
@@ -70,7 +70,7 @@ export function createPanel({root=sourceRoot,runCommand,autoTick=true}={}) {
       if(!s||!Array.isArray(s.times)||s.times.length<1||s.times.length>24)throw new Error('每天发布次数应为 1–24 次');
       const next=structuredClone(old);
       next.automation={...old.automation,enabled:old.automation?.enabled===true};
-      next.browser={...old.browser,expectedUsername:s.username,connectionMode:s.connectionMode ?? old.browser.connectionMode ?? 'dedicated',cdpEndpoint:s.cdpEndpoint ?? old.browser.cdpEndpoint ?? 'http://127.0.0.1:9222'};
+      next.browser={...old.browser,expectedUsername:s.username,connectionMode:s.connectionMode ?? old.browser.connectionMode ?? 'dedicated',cdpEndpoint:s.cdpEndpoint ?? old.browser.cdpEndpoint ?? 'auto'};
       next.schedule={...old.schedule,times:s.times,utcOffset:s.utcOffset,daysAhead:s.daysAhead,renderAheadHours:s.renderAheadHours,lateGraceMinutes:s.lateGraceMinutes};
       next.video={...old.video,objects:s.strategy==='cycle_all'?[...objectIds]:s.objects,strategy:s.strategy,cuts:s.cuts,seconds:s.seconds,width:s.width,fps:s.fps};
       next.caption=s.caption;validateConfig(next);
