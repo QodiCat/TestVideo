@@ -8,7 +8,7 @@ export function discoverEdgeEndpoint(userDataDir=join(process.env.LOCALAPPDATA ?
   catch{throw new Error('未检测到 Edge 调试端口：请在 Edge 打开 edge://inspect/#remote-debugging，勾选“允许对此浏览器实例进行远程调试”，然后重试。');}
   const [port,path]=content.trim().split(/\r?\n/);
   if(!/^\d+$/.test(port) || Number(port)<1 || Number(port)>65535 || !/^\/devtools\/browser\/[a-z0-9-]+$/i.test(path??''))throw new Error('Edge 调试端口记录无效，请在 edge://inspect/#remote-debugging 重新启用远程调试');
-  return 'http://127.0.0.1:'+Number(port);
+  return 'ws://127.0.0.1:'+Number(port)+path;
 }
 
 export function localCdpEndpoint(value='http://127.0.0.1:9222') {
@@ -21,8 +21,9 @@ export function localCdpEndpoint(value='http://127.0.0.1:9222') {
   return url.origin;
 }
 
-export async function inspectEdge(endpoint) {
-  if(endpoint==='auto')endpoint=discoverEdgeEndpoint();
+export async function inspectEdge(endpoint,{userDataDir}={}) {
+  // Approval-mode servers expose WebSocket only: /json/version legitimately returns 404.
+  if(endpoint==='auto')return {endpoint:discoverEdgeEndpoint(userDataDir),browser:null,source:'active-port'};
   endpoint=localCdpEndpoint(endpoint);
   let data;
   try {

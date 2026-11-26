@@ -39,7 +39,7 @@ export function createPanel({root=sourceRoot,runCommand,autoTick=true}={}) {
     const upcoming=jobs.filter(j=>['queued','ready','uploading','processing'].includes(j.status) && Date.parse(j.scheduled)>=Date.now());
     const totals={};for(const j of jobs)totals[j.status]=(totals[j.status]??0)+1;
     const cycle={next:upcoming.find(j=>j.cycleKey)?.video?.object ?? null};
-    return {settings:view(c),revision:revision(),catalog:Object.values(catalog).map(({id,name,family,shape,peel,flesh})=>({id,name,family,shape,peel,flesh})),
+    return {apiVersion:3,settings:view(c),revision:revision(),catalog:Object.values(catalog).map(({id,name,family,shape,peel,flesh})=>({id,name,family,shape,peel,flesh})),
       operation,lastResult,paused,loginOpen:!!login,workerLocked:workerLocked(),totals,next:upcoming[0]??null,cycle,
       jobs:jobs.slice(-2000).reverse().map(j=>({id:j.id,scheduled:j.scheduled,status:j.status,object:j.video?.object,name:catalog[j.video?.object]?.name ?? '本地视频',error:j.error,errorStage:j.errorStage,canRetry:j.status==='needs_review' && !j.containerId && !j.browserShareStartedAt && j.error?.startsWith('浏览器发布准备失败，'),hasVideo:!!j.file && existsSync(j.file)}))};
   }

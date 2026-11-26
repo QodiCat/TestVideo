@@ -54,13 +54,17 @@ export class BrowserInstagram {
       const {endpoint}=await inspectEdge(this.config.browser.cdpEndpoint ?? 'auto');
       try {
         this.attachedBrowser=await chromium.connectOverCDP(endpoint,{timeout:60000});
+        const identitySession=await this.attachedBrowser.newBrowserCDPSession();
+        let identity;
+        try{identity=await identitySession.send('Browser.getVersion');}finally{await identitySession.detach();}
+        if(!/Edg\//i.test((identity.product??'')+' '+(identity.userAgent??'')))throw new Error('连接的浏览器不是 Microsoft Edge');
         this.context=this.attachedBrowser.contexts()[0];
         if(!this.context)throw new Error('没有可用的 Edge 会话');
         const instagramPage=this.context.pages().find(page=>{try{return ['www.instagram.com','instagram.com'].includes(new URL(page.url()).hostname);}catch{return false;}});
         this.page=instagramPage ?? await this.context.newPage();
         this.page.setDefaultTimeout(15000);return;
       }catch{
-        await this.close();throw new Error('连接已有 Edge 失败，请检查调试端口与浏览器状态；不会回退到新窗口');
+        await this.close();throw new Error('连接已有 Edge 失败：如果 Edge 弹出允许控制浏览器的授权，请手动允许后重试；不会回退到新窗口');
       }
     }
     // Independent mode has its own persistent profile; no profile or cookie copying.

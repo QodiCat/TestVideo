@@ -24,7 +24,7 @@ test('auto detection reads the consent-enabled port file and rejects invalid rec
   const root=mkdtempSync(join(tmpdir(),'guiji-port-discovery-test-'));
   try{
     assert.throws(()=>discoverEdgeEndpoint(root),/edge:\/\/inspect/);
-    writeFileSync(join(root,'DevToolsActivePort'),'53128\n/devtools/browser/a1b2-c3d4\n');assert.equal(discoverEdgeEndpoint(root),'http://127.0.0.1:53128');
+    writeFileSync(join(root,'DevToolsActivePort'),'53128\n/devtools/browser/a1b2-c3d4\n');assert.equal(discoverEdgeEndpoint(root),'ws://127.0.0.1:53128/devtools/browser/a1b2-c3d4');
     for(const data of ['0\n/devtools/browser/test','65536\n/devtools/browser/test','9222\nws://example.com/browser','not-a-port\n/devtools/browser/test']){
       writeFileSync(join(root,'DevToolsActivePort'),data);assert.throws(()=>discoverEdgeEndpoint(root),/无效/);
     }
@@ -41,6 +41,17 @@ test('discovery rejects non-Edge and remote websocket redirects',async()=>{
     metadata={Browser:'Edg/158.0',webSocketDebuggerUrl:'ws://example.com:9222/devtools/browser/test'};
     await assert.rejects(()=>inspectEdge(endpoint),/相同的本机端口/);
   }finally{await new Promise(r=>server.close(r));}
+});
+
+test('approval-mode auto connection uses the recorded WebSocket even when HTTP discovery returns 404',async()=>{
+  const root=mkdtempSync(join(tmpdir(),'guiji-approval-test-'));let requests=0;
+  const server=createServer((req,res)=>{requests++;res.writeHead(404);res.end();});await new Promise(r=>server.listen(0,'127.0.0.1',r));
+  const port=server.address().port;
+  try{
+    writeFileSync(join(root,'DevToolsActivePort'),`${port}\n/devtools/browser/abcdef-1234\n`);
+    const discovery=await inspectEdge('auto',{userDataDir:root});assert.equal(discovery.endpoint,`ws://127.0.0.1:${port}/devtools/browser/abcdef-1234`);
+    assert.equal(discovery.source,'active-port');assert.equal(requests,0,'must not require /json/version');
+  }finally{await new Promise(r=>server.close(r));rmSync(root,{recursive:true,force:true});}
 });
 
 test('real Edge CDP attachment reuses Instagram tab and login context; disconnect keeps all tabs alive',async()=>{
@@ -63,6 +74,11 @@ test('real Edge CDP attachment reuses Instagram tab and login context; disconnec
     await app.close();assert.equal(unrelated.isClosed(),false);assert.equal(instagram.isClosed(),false);assert.equal(owner.pages().length,2);
     assert.equal(await unrelated.title(),'Unrelated tab');assert.equal(await instagram.title(),'Local Instagram fixture');
     await app.open();assert.equal(app.context.pages().length,2);await app.close();
+    // Connect directly through the ActivePort WebSocket with HTTP discovery disabled.
+    const websocket=discoverEdgeEndpoint(profile);
+    const {endpoint}=await inspectEdge('http://127.0.0.1:'+port);
+    assert.ok(endpoint.startsWith('http://'));
+    const direct=await chromium.connectOverCDP(websocket);assert.equal(direct.contexts()[0].pages().length,2);await direct.close();
     assert.equal(existsSync(join(root,'data/instagram-edge')),false,'must not create a dedicated profile');
   }finally{await app?.close();await owner?.close();rmSync(root,{recursive:true,force:true});}
 });

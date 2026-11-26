@@ -116,6 +116,13 @@ test('real browser panel: edit frequency, all-object strategy, save, toggle, rel
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
     await page.locator('.advanced').screenshot({path:fileURLToPath(new URL('edge-connection.png',out))});
     await page.reload();await page.waitForFunction(()=>document.querySelector('#login').textContent==='连接已有 Edge');
-    assert.equal(await page.locator('#connection-mode').inputValue(),'existing');assert.deepEqual(errors,[]);
+    assert.equal(await page.locator('#connection-mode').inputValue(),'existing');
+    // A stale Node process can serve new assets with the old API. Never silently save through it.
+    await page.route('**/api/state',async route=>{const response=await route.fetch();const old=await response.json();delete old.apiVersion;delete old.settings.connectionMode;delete old.settings.cdpEndpoint;await route.fulfill({json:old});});
+    await page.reload();await page.locator('#alert').filter({hasText:'后台版本较旧'}).waitFor();
+    assert.equal(await page.locator('#save').isDisabled(),true);
+    assert.notEqual(await page.locator('#connection-mode').inputValue(),'undefined');assert.notEqual(await page.locator('#cdp-endpoint').inputValue(),'undefined');
+    await page.unroute('**/api/state');await page.reload();await page.waitForFunction(()=>document.querySelector('#login').textContent==='连接已有 Edge');
+    assert.equal(await page.locator('#save').isEnabled(),true);assert.deepEqual(errors,[]);
   }finally{await browser.close();}
 });

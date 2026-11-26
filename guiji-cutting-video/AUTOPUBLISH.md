@@ -8,6 +8,8 @@
 
 `auto` 仅从当前 Windows 用户的 `%LOCALAPPDATA%/Microsoft/Edge/User Data/DevToolsActivePort` 读取启用后的调试端口，端口可能不是 9222；随后核验实际端口服务属于 Edge。程序不复制个人资料或 Cookie，不会主动开启调试权限，断开连接后保留窗口和标签页。使用完毕可以取消 Edge 中的调试许可。
 
+新版授权模式可能让 `/json/version` 和 `/json/list` 返回 HTTP 404，这不代表调试服务未开启。`auto` 使用端口文件的完整 WebSocket 路径直接连接，不依赖这些 HTTP 接口；连接建立并经用户授权后，再通过 CDP 核对 Edge 身份。
+
 也兼容手动填写 `http://127.0.0.1:9222` 等本机地址，但必须确认该端口实际开启。旧配置默认仍是项目专用 Edge，与“连接已有 Edge”是两种模式。
 
 参考：[微软文档：通过 edge://inspect 启用默认浏览器调试](https://learn.microsoft.com/en-us/microsoft-edge/web-ai/devtools-mcp-server#option-b-use-edgeinspect-to-enable-remote-debugging)。

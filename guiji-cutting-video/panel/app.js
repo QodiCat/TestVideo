@@ -6,7 +6,7 @@ const labels={queued:'待生成',ready:'待发布',published:'已发布',needs_r
 const strategies={cycle_all:'全部 100 种按顺序循环',cycle_selected:'所选物品按顺序循环',random:'从所选物品随机选择'};
 $('#frequency').innerHTML=Array.from({length:24},(_,i)=>`<option value="${i+1}">${i+1} 次 / 天</option>`).join('');
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let state,dirty=false,selected=new Set(),category='all',expanded=false,toastTimer,refreshing=false,queuePage=0;
+let state,dirty=false,selected=new Set(),category='all',expanded=false,toastTimer,refreshing=false,queuePage=0,versionMismatch=false;
 function toast(message){$('#toast').textContent=message;$('#toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').hidden=true,5500);}
 async function api(path,body){const response=await fetch('/api/'+path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-Panel-Token':token},body:JSON.stringify(body)});const data=await response.json();if(!response.ok)throw new Error(data.error??'操作失败');return data;}
 function markDirty(){dirty=true;$('#save-state').textContent='有尚未保存的修改';$('#save-state').classList.add('dirty');}
@@ -20,7 +20,7 @@ function hydrate(s){
   drawTimes(s.times);$('#days-ahead').value=s.daysAhead;$('#render-ahead').value=s.renderAheadHours;
   const radio=$(`input[name=strategy][value="${s.strategy}"]`);if(radio)radio.checked=true;
   selected=new Set(s.objects);$('#username').value=s.username;setSelect('#width',s.width);setSelect('#fps',s.fps);
-  setSelect('#connection-mode',s.connectionMode);$('#cdp-endpoint').value=s.cdpEndpoint;connectionHelp();
+  setSelect('#connection-mode',s.connectionMode??'dedicated');$('#cdp-endpoint').value=s.cdpEndpoint??'auto';connectionHelp();
   $('#late-grace').value=s.lateGraceMinutes;$('#cuts').value=s.cuts.join(', ');$('#seconds').value=s.seconds.join(', ');$('#caption').value=s.caption;
   $('#save-state').textContent='所有设置已同步';$('#save-state').classList.remove('dirty');renderLibrary();
 }
@@ -88,7 +88,18 @@ function renderStatus(){
 }
 async function refresh(force=false){
   if(refreshing)return;refreshing=true;
-  try{state=await api('state');if(force||!dirty)hydrate(state.settings);renderStatus();}
+  try{
+    state=await api('state');
+    if(state.apiVersion!==3 || !['existing','dedicated'].includes(state.settings?.connectionMode) || typeof state.settings?.cdpEndpoint!=='string'){
+      versionMismatch=true;hydrate(state.settings);renderStatus();
+      $('#alert').hidden=false;$('#alert').textContent='后台版本较旧：请关闭面板服务窗口，重新双击 open-panel.cmd 启动，再刷新页面。当前无法保存连接设置。';
+      $('#save-state').textContent='后台需要重启，设置尚未同步';$('#save-state').classList.add('dirty');
+      for(const control of $$('#settings-form input, #settings-form select, #settings-form textarea, #settings-form button, #automation-toggle, #login, #doctor, #prepare'))control.disabled=true;
+      return;
+    }
+    if(versionMismatch){location.reload();return;}
+    if(force||!dirty)hydrate(state.settings);renderStatus();
+  }
   catch(error){toast('无法读取面板状态：'+error.message);}finally{refreshing=false;}
 }
 async function perform(button,fn){button.disabled=true;try{await fn();await refresh();}catch(error){toast(error.message);}finally{button.disabled=false;if(state)renderStatus();}}
