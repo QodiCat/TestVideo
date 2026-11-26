@@ -1,11 +1,6 @@
 import * as THREE from '/three.module.js';
 import { clamp, cutProgress, impactTime, layerCut, makeTimeline, randomFromSeed, stageAt } from '/timeline.mjs';
-
-const presets = {
-  kiwi: { label: 'KIWI', peel: '#855633', flesh: '#a4df43', core: '#e4f5ad', accent: '#c7f36d' },
-  dragonfruit: { label: 'DRAGON FRUIT', peel: '#ba2058', flesh: '#f3e6eb', core: '#fff4fa', accent: '#ff82b6' },
-  soap: { label: 'SOAP BAR', peel: '#9e7bcd', flesh: '#c7a9e9', core: '#eadcfd', accent: '#dfbaff' },
-};
+import { catalog, crossScale, gridRows, layerPalette } from '/catalog.mjs';
 
 function texture(width, height, paint) {
   const canvas = document.createElement('canvas');
@@ -38,15 +33,27 @@ function skinTexture(spec, object, seed) {
   const rand = randomFromSeed(seed);
   return texture(512, 256, (ctx, w, h) => {
     const wash = ctx.createLinearGradient(0, 0, 0, h);
-    wash.addColorStop(0, '#553328');
+    wash.addColorStop(0, spec.peel);
     wash.addColorStop(0.38, spec.peel);
     wash.addColorStop(0.72, spec.peel);
-    wash.addColorStop(1, '#45312c');
-    ctx.fillStyle = object === 'soap' ? spec.peel : wash;
+    wash.addColorStop(1, spec.peel);
+    ctx.fillStyle = wash;
     ctx.fillRect(0, 0, w, h);
-    for (let i = 0; i < 14500; i++) {
+    for (let i = 0; i < (spec.skin === 'smooth' ? 700 : 10000); i++) {
       ctx.fillStyle = i % 2 ? 'rgba(255,232,189,0.24)' : 'rgba(27,12,7,0.19)';
       ctx.fillRect(rand() * w, rand() * h, rand() * 1.8, rand() * 2);
+    }
+    if (spec.skin === 'stripes' || spec.skin === 'net') {
+      ctx.strokeStyle = spec.skin === 'net' ? 'rgba(255,242,193,0.55)' : 'rgba(15,58,24,0.55)';
+      ctx.lineWidth = spec.skin === 'net' ? 1.4 : 14;
+      for (let x=-h; x<w+h; x+=spec.skin === 'net' ? 15 : 45) {
+        ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x+h*0.3,h); ctx.stroke();
+        if (spec.skin === 'net') { ctx.beginPath(); ctx.moveTo(x,h); ctx.lineTo(x+h*0.7,0); ctx.stroke(); }
+      }
+    }
+    if (spec.skin === 'pores') for (let i=0;i<700;i++) {
+      ctx.fillStyle='rgba(35,40,15,0.22)'; ctx.beginPath();
+      ctx.arc(rand()*w,rand()*h,1+rand()*3,0,Math.PI*2); ctx.fill();
     }
   });
 }
@@ -62,18 +69,45 @@ function crossSection(spec, object, seed) {
     gradient.addColorStop(0.94, spec.flesh);
     gradient.addColorStop(0.97, spec.peel);
     gradient.addColorStop(1, spec.peel);
-    ctx.fillStyle = gradient;
+    ctx.fillStyle = spec.shape === 'box' ? spec.flesh : gradient;
     ctx.fillRect(0, 0, w, w);
-    if (object === 'soap') return;
-    const seeds = object === 'kiwi' ? 105 : 250;
+    const section=spec.section;
+    const circle=(x,y,rx,ry,color,angle=0) => {
+      ctx.fillStyle=color; ctx.beginPath(); ctx.ellipse(x,y,rx,ry,angle,0,Math.PI*2); ctx.fill();
+    };
+    if (section === 'plain') return;
+    if (section === 'citrus') {
+      ctx.strokeStyle=spec.core; ctx.lineWidth=7;
+      for(let i=0;i<10;i++) { const a=i*Math.PI/5; ctx.beginPath(); ctx.moveTo(r,r); ctx.lineTo(r+Math.cos(a)*r*0.9,r+Math.sin(a)*r*0.9); ctx.stroke(); }
+      circle(r,r,15,15,spec.core); return;
+    }
+    if (section === 'rings') {
+      for(let i=1;i<=9;i++) { ctx.strokeStyle=i%2 ? spec.peel : spec.core; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(r,r,r*i/10,0,Math.PI*2); ctx.stroke(); } return;
+    }
+    if (section === 'stone') { circle(r,r,r*0.31,r*0.43,spec.core); return; }
+    if (section === 'layers' || section === 'rainbow') {
+      const colors=layerPalette(spec);
+      colors.forEach((color,i)=>{ctx.fillStyle=color;ctx.fillRect(8,8+i*(w-16)/colors.length,w-16,(w-16)/colors.length);}); return;
+    }
+    if (section === 'marble') {
+      ctx.strokeStyle=spec.ink ?? spec.core;ctx.lineWidth=6;
+      for(let i=0;i<18;i++){ const y=rand()*w;ctx.beginPath();ctx.moveTo(0,y);ctx.bezierCurveTo(w*.3,y+100,w*.7,y-100,w,y+40);ctx.stroke(); }return;
+    }
+    if (section === 'lotus') {
+      for(let i=0;i<8;i++){const a=i*Math.PI/4;circle(r+Math.cos(a)*r*.52,r+Math.sin(a)*r*.52,25,40,'#a38d6b',a);}circle(r,r,17,17,'#a38d6b');return;
+    }
+    if (section === 'tomato') {
+      for(let i=0;i<5;i++){const a=i*Math.PI*2/5;circle(r+Math.cos(a)*r*.47,r+Math.sin(a)*r*.47,40,65,spec.core,a);}return;
+    }
+    const seeds = section === 'kiwi' ? 105 : ['pores','chips','flecks'].includes(section) ? 140 : section === 'watermelon' ? 30 : section === 'pome' ? 10 : 250;
     for (let i = 0; i < seeds; i++) {
       const angle = rand() * Math.PI * 2;
-      const radius = r * (object === 'kiwi' ? 0.29 + rand() * 0.32 : Math.sqrt(rand()) * 0.91);
-      const size = 1 + rand() * 3;
-      ctx.fillStyle = '#261e18';
-      ctx.beginPath();
-      ctx.ellipse(r + Math.cos(angle) * radius, r + Math.sin(angle) * radius, size * 1.55, size, angle, 0, Math.PI * 2);
-      ctx.fill();
+      const radius = r * (section === 'kiwi' ? 0.29 + rand() * 0.32 : ['melon','papaya','guava','pome','cucumber'].includes(section) ? Math.sqrt(rand())*.4 : Math.sqrt(rand())*.89);
+      const size = section === 'pores' ? 3+rand()*9 : section === 'chips' ? 4+rand()*5 : section === 'watermelon' ? 4+rand()*3 : 1+rand()*3;
+      const color=spec.ink ?? (section === 'pores' ? spec.peel : section === 'flecks' ? '#997d64' : ['melon','guava','cucumber'].includes(section) ? '#b29a60' : '#30221c');
+      const x=['pores','chips','flecks'].includes(section) ? 10+rand()*(w-20) : r+Math.cos(angle)*radius;
+      const y=['pores','chips','flecks'].includes(section) ? 10+rand()*(w-20) : r+Math.sin(angle)*radius;
+      circle(x,y,size*1.55,size,color,angle);
     }
   });
 }
@@ -124,44 +158,29 @@ function addKnife(scene) {
   return knife;
 }
 
-function gridRows(dimensions, rectangular, visit) {
-  const [nx, ny, nz] = dimensions;
-  for (let j = 0; j < nz; j++) {
-    const z = 1 - (2 * j + 1) / nz;
-    for (let i = 0; i < nx; i++) {
-      const x = (2 * i + 1) / nx - 1;
-      const radiusSquared = 1 - x * x - z * z;
-      if (!rectangular && radiusSquared < 0) continue;
-      const radius = rectangular ? 1 : Math.sqrt(radiusSquared);
-      const firstY = Math.max(0, Math.ceil((1 - radius) * ny / 2 - 0.5 - 1e-9));
-      const lastY = Math.min(ny - 1, Math.floor((1 + radius) * ny / 2 - 0.5 + 1e-9));
-      visit(j, x, z, firstY, lastY);
-    }
-  }
-}
-
 function makeFragments(spec, object, radii, stage, material, seed) {
   const rand = randomFromSeed(seed);
   const [alongX, horizontal, alongZ] = stage.axes;
   const dimensions = [alongX + 1, horizontal + 1, alongZ + 1];
-  const rectangular = object === 'soap';
+  const rectangular = spec.shape === 'box';
+  const layers = layerPalette(spec);
   const counts = new Array(alongZ + 1).fill(0);
   const fragments = [];
   if (alongZ > 0) {
-    gridRows(dimensions, rectangular, (j, x, z, first, last) => {
+    gridRows(dimensions, spec.shape, (j, x, z, first, last) => {
       counts[j] += Math.max(0, last - first + 1);
     });
     const sampling = Math.max(1, Math.cbrt(dimensions.reduce((a, b) => a * b, 1) / 12000));
     const visibleGrid = dimensions.map(n => Math.max(1, Math.floor(n / sampling)));
     const steps = visibleGrid.map((n, axis) => 2 * radii[axis] / n);
-    gridRows(visibleGrid, rectangular, (j, xNorm, zNorm, first, last) => {
+    gridRows(visibleGrid, spec.shape, (j, xNorm, zNorm, first, last) => {
       const layer = Math.floor((j + 0.5) * dimensions[2] / visibleGrid[2]);
       const dropAt = impactTime(stage, layerCut(stage, layer));
       for (let k = first; k <= last; k++) {
         const yNorm = (2 * k + 1) / visibleGrid[1] - 1;
         const radius = Math.hypot(xNorm, yNorm, zNorm);
-        const outside = !rectangular && radius > 0.89;
-        const color = new THREE.Color(outside && rand() < 0.7 ? spec.peel : radius < 0.4 ? spec.core : spec.flesh);
+        const outside = rectangular ? Math.max(Math.abs(xNorm),Math.abs(yNorm),Math.abs(zNorm)) > 0.85 : spec.shape === 'cylinder' ? Math.hypot(xNorm,zNorm)>0.89 || Math.abs(yNorm)>0.89 : radius > 0.89;
+        const color = new THREE.Color(layers ? layers[Math.min(layers.length-1,Math.floor((1-yNorm)*0.5*layers.length))] : outside && rand() < 0.7 ? spec.peel : radius < 0.4 ? spec.core : spec.flesh);
         color.multiplyScalar(0.83 + rand() * 0.27);
         const x = xNorm * radii[0];
         const y = yNorm * radii[1];
@@ -189,11 +208,12 @@ function makeFragments(spec, object, radii, stage, material, seed) {
   return { mesh, fragments, counts };
 }
 
-function makeMarks(axis, count, radii, center, object, plane) {
+function makeMarks(axis, count, radii, center, spec, plane) {
   const across = axis === 0 ? 1 : 0;
   const positions = [];
   const ranges = [];
-  const sides = object === 'soap' ? 4 : 64;
+  const rectangular = spec.shape === 'box' || (spec.shape === 'cylinder' && axis === 0);
+  const sides = rectangular ? 4 : 64;
   const stride = Math.max(1, Math.ceil(count / 32));
   for (let cut = 1; cut <= count; cut++) {
     if (cut % stride !== 0 && cut !== count) continue;
@@ -204,12 +224,13 @@ function makeMarks(axis, count, radii, center, object, plane) {
       const angle = 2 * Math.PI * i / sides;
       const point = [0, 0, 0];
       point[axis] = radii[axis] * relative;
-      if (object === 'soap') {
+      if (rectangular) {
         point[across] = radii[across] * (i < 2 ? 1.004 : -1.004);
-        point[2] = radii[2] * (i % 3 === 0 ? 1.004 : -1.004);
+        point[2] = radii[2] * (i % 3 === 0 ? 1.004 : -1.004) * (spec.shape === 'cylinder' ? radius : 1);
       } else {
-        point[across] = radii[across] * Math.cos(angle) * radius;
-        point[2] = radii[2] * Math.sin(angle) * radius;
+        const ringRadius = spec.shape === 'cylinder' ? 1.005 : radius;
+        point[across] = radii[across] * Math.cos(angle) * ringRadius;
+        point[2] = radii[2] * Math.sin(angle) * ringRadius;
       }
       point[1] += center;
       ring.push(point);
@@ -227,7 +248,8 @@ function makeMarks(axis, count, radii, center, object, plane) {
 
 export function createVideo(config) {
   const { width, height, object, seed } = config;
-  const spec = presets[object];
+  const spec = catalog[object];
+  if (!Object.hasOwn(catalog, object)) throw new Error('Unknown object preset: ' + object);
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#142024');
   const gl = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -271,24 +293,24 @@ export function createVideo(config) {
   board.castShadow = true;
   scene.add(board);
   const boardY = 0.27;
-  const radii = object === 'soap' ? [1.50, 0.48, 1.04] : [1.39, 1.02, 1.13];
+  const radii = spec.radii;
   const center = boardY + radii[1] + 0.02;
   const plane = new THREE.Plane(new THREE.Vector3(0, 0, -1), radii[2] + 1);
   const skin = new THREE.MeshStandardMaterial({
     map: skinTexture(spec, object, seed + 2),
-    roughness: object === 'dragonfruit' ? 0.37 : 0.81,
+    roughness: spec.roughness,
     clippingPlanes: [plane], clipShadows: true,
   });
-  const hull = new THREE.Mesh(object === 'soap'
-    ? roundedBox(2 * radii[0], 2 * radii[1], 2 * radii[2], 0.16)
-    : new THREE.SphereGeometry(1, 72, 48), skin);
-  if (object !== 'soap') hull.scale.set(...radii);
+  const hull = new THREE.Mesh(spec.shape === 'box'
+    ? roundedBox(2 * radii[0], 2 * radii[1], 2 * radii[2], 0.12)
+    : spec.shape === 'cylinder' ? new THREE.CylinderGeometry(1,1,2,72) : new THREE.SphereGeometry(1, 72, 48), skin);
+  if (spec.shape !== 'box') hull.scale.set(...radii);
   hull.position.y = center;
   hull.castShadow = true;
   hull.receiveShadow = true;
   scene.add(hull);
 
-  const interior = new THREE.Mesh(object === 'soap'
+  const interior = new THREE.Mesh(spec.shape !== 'ellipsoid'
     ? new THREE.PlaneGeometry(2, 2)
     : new THREE.CircleGeometry(1, 72),
   new THREE.MeshStandardMaterial({ map: crossSection(spec, object, seed + 3), roughness: 0.72 }));
@@ -300,7 +322,7 @@ export function createVideo(config) {
   const fragmentMaterial = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.76 });
   const batches = timeline.map((stage, index) => {
     const batch = makeFragments(spec, object, radii, stage, fragmentMaterial, seed + index * 281);
-    const marks = [0, 1].map(axis => makeMarks(axis, stage.axes[axis], radii, center, object, plane));
+    const marks = [0, 1].map(axis => makeMarks(axis, stage.axes[axis], radii, center, spec, plane));
     scene.add(batch.mesh, ...marks.map(mark => mark.line));
     return { ...batch, marks };
   });
@@ -375,9 +397,9 @@ export function createVideo(config) {
     hull.visible = !alongZ || removed < alongZ;
     plane.constant = removed ? edge : radii[2] + 0.01;
     interior.visible = removed > 0 && hull.visible;
-    const crossRadius = object === 'soap' ? 0.98 : Math.sqrt(Math.max(0, 1 - boundary ** 2));
+    const [crossWidth,crossHeight] = crossScale(spec.shape, boundary);
     interior.position.z = edge + 0.002;
-    interior.scale.set(radii[0] * crossRadius, radii[1] * crossRadius, 1);
+    interior.scale.set(radii[0] * crossWidth, radii[1] * crossHeight, 1);
 
     const phase = progress % 1;
     const sweep = clamp(phase / 0.62);
@@ -430,12 +452,23 @@ export function createVideo(config) {
     const layers = removed > 0 && removed === alongZ ? removed + 1 : removed;
     const pieces = active.counts.slice(0, layers).reduce((total, count) => total + count, 0);
     overlay(index, localTime, cuts, pieces, direction);
+    output.frameInfo = { object, cuts, pieces, direction, stage:index, visibleFragments:visible, interiorVisible:interior.visible };
     return output;
   }
+  render.dispose = () => {
+    const geometries=new Set(), materials=new Set(), textures=new Set();
+    scene.traverse(node=>{if(node.geometry)geometries.add(node.geometry);if(node.material)for(const m of [node.material].flat())materials.add(m);if(node.isInstancedMesh)node.dispose();});
+    for(const m of materials){for(const value of Object.values(m))if(value?.isTexture)textures.add(value);m.dispose();}
+    for(const t of textures)t.dispose();for(const g of geometries)g.dispose();
+    gl.dispose(); gl.forceContextLoss();
+  };
   return render;
 }
 
+let activeRender;
 window.configureVideo = config => {
-  const render = createVideo(config);
+  activeRender?.dispose();
+  const render = activeRender = createVideo(config);
   window.renderBatch = times => times.map(time => render(time).toDataURL('image/jpeg', 0.92).split(',')[1]);
+  window.inspectFrame = time => render(time).frameInfo;
 };

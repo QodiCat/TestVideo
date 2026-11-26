@@ -6,6 +6,11 @@
   "engines": { "node": ">=24.0.0" },
   "scripts": {
     "test": "node --test test/*.test.mjs",
+    "objects": "node scripts/objects.mjs",
+    "catalog:write": "node scripts/objects.mjs --write",
+    "verify:catalog": "node scripts/verify-catalog.mjs",
+    "preview:catalog": "node scripts/preview-catalog.mjs",
+    "demo:catalog": "node scripts/demo-catalog.mjs",
     "plan": "node scripts/publish.mjs plan",
     "start": "node scripts/publish.mjs run",
     "status": "node scripts/publish.mjs status"

@@ -12,7 +12,14 @@
 
 让 Codex 读取 [SKILL.md](SKILL.md)，告诉它物体、切刀档位和每档时长。例如「用这个 Skill 做一个猕猴桃切 10、50、100 刀的竖屏视频」。
 
-支持猕猴桃、火龙果和肥皂三个内置预设。模型与音效在本地生成。水果块数来自三轴网格估算，高刀数时画面会降低碎块渲染密度。
+支持 **100 种物品预设**（含原有 3 种），覆盖水果、瓜菜、奶酪、甜点、面包蛋糕和日用品。完整名称、ID、形状和使用说明见 [物品清单](OBJECTS.md)，每种都有 [配置示例](examples/objects)。品种及口味变体分别计数；使用椭圆体、圆角方块和圆柱的简化模型，果核、孔洞和夹层等通过切面纹理呈现，不模拟流心或柔体物理。模型与音效在本地生成，块数来自三轴网格估算，高刀数时画面会降低碎块渲染密度。
+
+```powershell
+node scripts/objects.mjs
+node scripts/render.mjs examples/objects/watermelon.json output/watermelon.mp4
+```
+
+开发检查：`npm test`；`npm run verify:catalog` 对全部物品实际渲染三个刀向和 10、50、100 刀重置，另检查 1、2、3、1000 刀边界。预览和报告写到 `output/catalog-verification`。生成或更新清单与示例：`npm run catalog:write`。
 
 ## Instagram 自动发布程序
 

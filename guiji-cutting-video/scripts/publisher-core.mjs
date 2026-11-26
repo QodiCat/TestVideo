@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { hasObject } from './catalog.mjs';
 
 export function loadEnv(path) {
   if (!existsSync(path)) return;
@@ -32,7 +33,7 @@ export function validateConfig(c) {
     if (!Number.isInteger(s[key]) || s[key] < min || s[key] > max) fail('schedule.' + key + ' 超出范围');
   }
   const v = c.video;
-  if (!v || !Array.isArray(v.objects) || !v.objects.length || v.objects.some(o => !['kiwi', 'soap', 'dragonfruit'].includes(o))) fail('objects 只支持 kiwi、dragonfruit、soap');
+  if (!v || !Array.isArray(v.objects) || !v.objects.length || v.objects.some(o => !hasObject(o))) fail('objects 含有不支持的物品，请查阅 OBJECTS.md');
   if (!Array.isArray(v.cuts) || !v.cuts.length || v.cuts.length > 6 || v.cuts.some((n, i) => !Number.isInteger(n) || n < 1 || n > 1000 || (i > 0 && n <= v.cuts[i - 1]))) fail('cuts 应为递增整数，范围 1–1000');
   if (!Array.isArray(v.seconds) || v.seconds.length !== v.cuts.length || v.seconds.some(n => !Number.isFinite(n) || n < 2 || n > 24) || v.seconds.reduce((a, b) => a + b, 0) < 3) fail('seconds 无效，视频总时长至少 3 秒');
   if (![360, 540, 720, 1080].includes(v.width) || ![24, 30, 60].includes(v.fps)) fail('width 或 fps 无效');

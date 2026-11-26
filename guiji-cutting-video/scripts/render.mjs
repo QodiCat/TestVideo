@@ -8,12 +8,13 @@ import { homedir, tmpdir } from 'node:os';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { impactTime, makeTimeline, randomFromSeed } from './timeline.mjs';
+import { hasObject } from './catalog.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const cache = process.env.GUIJI_CUTTING_DEPS
-  ?? join(process.env.LOCALAPPDATA ?? homedir(), 'guiji-cutting-renderer');
+  ?? (existsSync(join(scriptDir,'../../.render-deps/node_modules/three')) ? join(scriptDir,'../../.render-deps') : join(process.env.LOCALAPPDATA ?? homedir(), 'guiji-cutting-renderer'));
 
-function loadDependencies() {
+export function loadDependencies() {
   const require = createRequire(join(resolve(cache), 'package.json'));
   try {
     const { chromium } = require('playwright-core');
@@ -24,7 +25,7 @@ function loadDependencies() {
   }
 }
 
-function findBrowser() {
+export function findBrowser() {
   const candidates = [
     process.env.GUIJI_CHROMIUM,
     ...[process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.LOCALAPPDATA]
@@ -38,10 +39,10 @@ function findBrowser() {
   return browser;
 }
 
-function configuration(input) {
+export function configuration(input) {
   const { object, cuts, label, seed = 1511, width = 720, fps = 30 } = input;
   const seconds = input.seconds ?? cuts?.map((_, i) => 4.5 + i * 1.5);
-  if (!['kiwi', 'dragonfruit', 'soap'].includes(object)) throw new Error('Unknown object preset.');
+  if (!hasObject(object)) throw new Error('Unknown object preset. See OBJECTS.md.');
   if (!Array.isArray(cuts) || cuts.length < 1 || cuts.length > 6 ||
       cuts.some((n, i) => !Number.isInteger(n) || n < 1 || n > 1000 || (i && n <= cuts[i - 1]))) {
     throw new Error('cuts must contain 1–6 strictly increasing integer values from 1 to 1000.');
@@ -57,10 +58,11 @@ function configuration(input) {
   return { object, cuts, seconds, label, seed, width, height: width * 16 / 9, fps };
 }
 
-async function startServer(three) {
+export async function startServer(three) {
   const files = {
     '/scene.mjs': join(scriptDir, 'scene.mjs'),
     '/timeline.mjs': join(scriptDir, 'timeline.mjs'),
+    '/catalog.mjs': join(scriptDir, 'catalog.mjs'),
     '/three.module.js': three,
     '/three.core.js': join(dirname(three), 'three.core.js'),
   };
@@ -203,7 +205,7 @@ async function main() {
   }
 }
 
-main().catch(error => {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => {
   console.error(error.message);
   process.exitCode = 1;
 });

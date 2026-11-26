@@ -102,7 +102,7 @@ node scripts/publish.mjs prepare
 
 北京时间用 `+08:00`。这是固定 UTC 偏移，不会自动切换夏令时。每天可配置多个时间点，运行期间自动补充未来 7 天排期。轮询间隔默认 60 秒；上传与 Meta 转码需要额外时间，因此发布时间可能略晚于设定时间。电脑离线超过宽限期的旧任务会跳过，避免恢复后集中补发。
 
-`video.objects` 支持 `kiwi`、`dragonfruit`、`soap`，按任务 seed 确定性选择，并用不同 seed 渲染。可修改刀数、每档秒数、分辨率和 fps；不同 seed 不保证画面有显著变化。`caption` 支持 `{object}` 和 `{cuts}`。`isAiGenerated` 默认 false，因为当前视频由程序化 3D 渲染生成；若更换为需标注的 AI 素材，可设为 true。
+`video.objects` 支持 [物品清单](OBJECTS.md) 中的全部 100 个 ID，按任务 seed 确定性选择，并用不同 seed 渲染。`examples/all-objects.json` 提供完整 ID 数组，可复制到 `video.objects`；此文件是物品数组片段，不是完整发布配置。已有配置和已排期任务不会因新增物品而自动变更。可修改刀数、每档秒数、分辨率和 fps；不同 seed 不保证画面有显著变化。`caption` 支持 `{object}` 和 `{cuts}`。`isAiGenerated` 默认 false，因为当前视频由程序化 3D 渲染生成；若更换为需标注的 AI 素材，可设为 true。
 
 已排期任务保存配置快照，改配置只影响新任务。要替换已有排期，先停止 worker，使用 `cancel <任务ID>` 取消旧任务，调整发布时间再重新 `plan`；已取消的同一时间点不会再次入队，防止重复发布。连续运行的进程在启动时读取配置，改配置后需重启；Windows 每分钟运行模式下会在下次启动时读取。
 
