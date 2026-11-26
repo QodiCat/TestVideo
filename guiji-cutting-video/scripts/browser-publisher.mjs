@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
+import {inspectEdge} from './edge-connection.mjs';
 
 export function browserRuntime(root) {
   const deps = process.env.GUIJI_CUTTING_DEPS ??
@@ -49,7 +50,20 @@ export class BrowserInstagram {
     if (this.context && this.page && !this.page.isClosed()) return;
     if (this.context) await this.close();
     const { chromium, executablePath } = browserRuntime(this.root);
-    // Dedicated profile: never attach to or copy a user's normal browser profile.
+    if(this.config.browser.connectionMode==='existing') {
+      const {endpoint}=await inspectEdge(this.config.browser.cdpEndpoint);
+      try {
+        this.attachedBrowser=await chromium.connectOverCDP(endpoint,{timeout:10000});
+        this.context=this.attachedBrowser.contexts()[0];
+        if(!this.context)throw new Error('没有可用的 Edge 会话');
+        const instagramPage=this.context.pages().find(page=>{try{return ['www.instagram.com','instagram.com'].includes(new URL(page.url()).hostname);}catch{return false;}});
+        this.page=instagramPage ?? await this.context.newPage();
+        this.page.setDefaultTimeout(15000);return;
+      }catch{
+        await this.close();throw new Error('连接已有 Edge 失败，请检查调试端口与浏览器状态；不会回退到新窗口');
+      }
+    }
+    // Independent mode has its own persistent profile; no profile or cookie copying.
     this.context = await chromium.launchPersistentContext(join(this.root, 'data', 'instagram-edge'), {
       executablePath, headless: false, viewport: { width: 1440, height: 1000 },
       locale: 'en-US', acceptDownloads: false,
@@ -57,7 +71,13 @@ export class BrowserInstagram {
     this.page = this.context.pages()[0] ?? await this.context.newPage();
     this.page.setDefaultTimeout(15000);
   }
-  async close() { await this.context?.close(); this.context = null; }
+  async close() {
+    try {
+      // Browser.close() on a CDP client disconnects it. Never close the user's default context.
+      if(this.attachedBrowser)await this.attachedBrowser.close();
+      else await this.context?.close();
+    }finally{this.attachedBrowser=null;this.context=null;this.page=null;this.shareButton=null;}
+  }
   async guard() {
     const page = this.page;
     if (/\/(?:accounts\/login|challenge|checkpoint|two_factor|accounts\/suspended)/i.test(page.url()) ||

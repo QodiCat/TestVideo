@@ -107,6 +107,15 @@ test('real browser panel: edit frequency, all-object strategy, save, toggle, rel
     await page.locator('#search').fill('牛油果');assert.equal(await page.locator('.object-card').count(),1);assert.match(await page.locator('.object-card').innerText(),/牛油果/);
     await page.locator('#search').fill('');
     await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
-    await page.screenshot({path:fileURLToPath(new URL('mobile.png',out)),fullPage:true});assert.deepEqual(errors,[]);
+    await page.screenshot({path:fileURLToPath(new URL('mobile.png',out)),fullPage:true});
+    await page.locator('.advanced summary').click();await page.selectOption('#connection-mode','existing');
+    assert.equal(await page.locator('#cdp-endpoint').isEnabled(),true);
+    await page.locator('#cdp-endpoint').fill('http://127.0.0.1:9222');await page.locator('#save').click();
+    await page.waitForFunction(()=>document.querySelector('#login').textContent==='连接已有 Edge');
+    assert.equal(app.snapshot().settings.connectionMode,'existing');assert.equal(app.snapshot().settings.cdpEndpoint,'http://127.0.0.1:9222');
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
+    await page.locator('.advanced').screenshot({path:fileURLToPath(new URL('edge-connection.png',out))});
+    await page.reload();await page.waitForFunction(()=>document.querySelector('#login').textContent==='连接已有 Edge');
+    assert.equal(await page.locator('#connection-mode').inputValue(),'existing');assert.deepEqual(errors,[]);
   }finally{await browser.close();}
 });

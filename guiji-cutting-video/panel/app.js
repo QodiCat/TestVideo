@@ -20,8 +20,14 @@ function hydrate(s){
   drawTimes(s.times);$('#days-ahead').value=s.daysAhead;$('#render-ahead').value=s.renderAheadHours;
   const radio=$(`input[name=strategy][value="${s.strategy}"]`);if(radio)radio.checked=true;
   selected=new Set(s.objects);$('#username').value=s.username;setSelect('#width',s.width);setSelect('#fps',s.fps);
+  setSelect('#connection-mode',s.connectionMode);$('#cdp-endpoint').value=s.cdpEndpoint;connectionHelp();
   $('#late-grace').value=s.lateGraceMinutes;$('#cuts').value=s.cuts.join(', ');$('#seconds').value=s.seconds.join(', ');$('#caption').value=s.caption;
   $('#save-state').textContent='所有设置已同步';$('#save-state').classList.remove('dirty');renderLibrary();
+}
+function connectionHelp(){
+  const existing=$('#connection-mode').value==='existing';
+  $('#cdp-endpoint').disabled=!existing;
+  $('#connection-help').textContent=existing?'先用调试端口启动本机 Edge，并登录 Instagram。连接地址的 /json/version 应可打开；发布结束后只断开连接，保留浏览器。':'使用项目专用的 Edge 登录资料，登录一次后持续保存。';
 }
 function objectImage(item){
   const solid=item.shape==='box'?`<path d="M14 31 62 18 106 33 58 48Z" fill="${item.peel}"/><path d="M14 31 58 48 58 74 14 57Z" fill="${item.peel}"/><path d="M58 48 106 33 106 59 58 74Z" fill="${item.flesh}" opacity=".95"/>`:item.shape==='cylinder'?`<path d="M25 35V61C25 81 95 81 95 61V35Z" fill="${item.peel}"/><ellipse cx="60" cy="35" rx="35" ry="16" fill="${item.flesh}"/>`:`<ellipse cx="60" cy="49" rx="37" ry="28" fill="${item.peel}"/><ellipse cx="70" cy="46" rx="24" ry="24" fill="${item.flesh}"/><ellipse cx="71" cy="44" rx="17" ry="18" fill="${item.peel}" opacity=".08"/>`;
@@ -59,6 +65,8 @@ function renderQueue(){
 }
 function renderStatus(){
   const s=state.settings,enabled=s.enabled,busy=!!state.operation;
+  const existing=s.connectionMode==='existing';
+  $('#login').textContent=existing?'连接已有 Edge':'打开登录窗口';$('#verify-login').textContent=existing?'验证当前账号':'已登录，验证并保存';$('#close-login').textContent=existing?'断开连接':'关闭登录窗口';
   $('#account-tag').textContent='Instagram · @'+s.username;
   $('#automation-toggle').setAttribute('aria-checked',String(enabled));$('#automation-toggle').setAttribute('aria-label',enabled?'关闭自动化发布':'开启自动化发布');
   $('#automation-toggle').disabled=!enabled && (busy||state.loginOpen||state.workerLocked);
@@ -71,7 +79,7 @@ function renderStatus(){
   $('#stat-pool').textContent=s.objects.length;$('#stat-strategy').textContent=strategies[s.strategy];
   $('#stat-next').textContent=state.next?formatTime(state.next.scheduled):'尚未排期';
   $('#stat-next-object').textContent=state.next?((state.catalog.find(o=>o.id===state.next.video?.object)?.name??'本地视频')+' · UTC'+s.utcOffset):'保存设置后生成计划';
-  $('#engine-message').textContent=state.loginOpen?'登录窗口已打开，完成登录和验证后，点击“已登录，验证并保存”。':busy?'正在运行：'+({prepare:'生成视频',run:'自动发布轮询',doctor:'检查账号',plan:'更新排期'}[state.operation.command]??state.operation.command):state.workerLocked?'检测到其他发布任务正在使用引擎。':'使用专用 Edge 会话。电脑需开机，面板服务需保持运行。';
+  $('#engine-message').textContent=state.loginOpen?(existing?'已连接你的 Edge，请确认 Instagram 登录正确后点击“验证当前账号”。':'登录窗口已打开，完成登录和验证后，点击“已登录，验证并保存”。'):busy?'正在运行：'+({prepare:'生成视频',run:'自动发布轮询',doctor:'检查账号',plan:'更新排期'}[state.operation.command]??state.operation.command):state.workerLocked?'检测到其他发布任务正在使用引擎。':existing?'连接已有 Edge · '+s.cdpEndpoint+'。发布时请保持 Edge 和面板服务运行。':'使用专用 Edge 会话。电脑需开机，面板服务需保持运行。';
   $('#login').hidden=state.loginOpen;$('#verify-login').hidden=!state.loginOpen;$('#close-login').hidden=!state.loginOpen;
   for(const id of ['#doctor','#prepare','#login','#save'])$(id).disabled=busy||state.loginOpen||state.workerLocked;
   $('#result-card').hidden=!state.lastResult;
@@ -86,6 +94,7 @@ async function refresh(force=false){
 async function perform(button,fn){button.disabled=true;try{await fn();await refresh();}catch(error){toast(error.message);}finally{button.disabled=false;if(state)renderStatus();}}
 $('#settings-form').addEventListener('input',event=>{if(!event.target.closest('#search'))markDirty();});
 $('#settings-form').addEventListener('change',event=>{if(event.target.name==='strategy'){renderLibrary();markDirty();}});
+$('#connection-mode').onchange=()=>{connectionHelp();markDirty();};
 $('#frequency').addEventListener('change',()=>{const previous=times(),count=Number($('#frequency').value),defaults=distribute(count);drawTimes(count>previous.length?defaults:previous.slice(0,count));renderLibrary();markDirty();});
 $('#distribute').onclick=()=>{drawTimes(distribute(Number($('#frequency').value)));markDirty();};
 $('#search').oninput=()=>renderLibrary();
@@ -98,13 +107,13 @@ $('#settings-form').onsubmit=event=>{event.preventDefault();void perform($('#sav
   const values=times();if(new Set(values).size!==values.length)throw new Error('发布时间不能重复');
   if(!selected.size)throw new Error('请至少选择一种物品');
   const numbers=id=>$(id).value.split(/[,，]/).map(s=>Number(s.trim()));
-  const settings={username:$('#username').value.trim(),times:values.sort(),utcOffset:$('#timezone').value,daysAhead:Number($('#days-ahead').value),renderAheadHours:Number($('#render-ahead').value),lateGraceMinutes:Number($('#late-grace').value),strategy:strategy(),objects:state.catalog.filter(o=>selected.has(o.id)).map(o=>o.id),cuts:numbers('#cuts'),seconds:numbers('#seconds'),width:Number($('#width').value),fps:Number($('#fps').value),caption:$('#caption').value};
+  const settings={username:$('#username').value.trim(),connectionMode:$('#connection-mode').value,cdpEndpoint:$('#cdp-endpoint').value.trim(),times:values.sort(),utcOffset:$('#timezone').value,daysAhead:Number($('#days-ahead').value),renderAheadHours:Number($('#render-ahead').value),lateGraceMinutes:Number($('#late-grace').value),strategy:strategy(),objects:state.catalog.filter(o=>selected.has(o.id)).map(o=>o.id),cuts:numbers('#cuts'),seconds:numbers('#seconds'),width:Number($('#width').value),fps:Number($('#fps').value),caption:$('#caption').value};
   const result=await api('settings',{revision:state.revision,settings});dirty=false;toast(`已保存，更新 ${result.removed} 个未来任务，生成 ${result.added} 个新计划`);
 });};
 $('#automation-toggle').onclick=()=>{void perform($('#automation-toggle'),async()=>{if(dirty&&!state.settings.enabled)throw new Error('请先保存当前修改，再开启自动发布');const enabled=!state.settings.enabled;await api('automation',{enabled});toast(enabled?'自动发布已开启，将按已保存的计划执行':'自动发布已关闭；已发起的分享仍会完成状态核对');});};
 $('#refresh').onclick=()=>{if(dirty){void refresh();toast('运行状态已刷新，未保存的编辑已保留');}else void refresh(true);};
 for(const [id,command] of [['#doctor','doctor'],['#prepare','prepare']])$(id).onclick=()=>{void perform($(id),async()=>{await api('action',{command,live:command==='doctor'});toast(command==='prepare'?'备片任务已开始':'正在检查 Instagram 账号');});};
-$('#login').onclick=()=>{void perform($('#login'),async()=>{if(dirty)throw new Error('请先保存账号和其他设置');await api('login/open',{});toast('请在打开的 Edge 窗口登录，并完成验证');});};
+$('#login').onclick=()=>{void perform($('#login'),async()=>{if(dirty)throw new Error('请先保存账号和其他设置');await api('login/open',{});toast(state.settings.connectionMode==='existing'?'已连接已有 Edge，请确认 Instagram 登录账号':'请在打开的 Edge 窗口登录，并完成验证');});};
 $('#verify-login').onclick=()=>{void perform($('#verify-login'),async()=>{await api('login/verify',{});toast('账号验证成功，登录状态已保存');});};
 $('#close-login').onclick=()=>{void perform($('#close-login'),async()=>{await api('login/close',{});});};
 $('#queue-filter').onchange=()=>{queuePage=0;renderQueue();};

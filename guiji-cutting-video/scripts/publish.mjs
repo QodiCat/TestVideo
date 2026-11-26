@@ -171,7 +171,7 @@ async function main() {
     const browsers = [process.env.GUIJI_CHROMIUM, ...[process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.LOCALAPPDATA].filter(Boolean).flatMap(p => [join(p, 'Google/Chrome/Application/chrome.exe'), join(p, 'Microsoft/Edge/Application/msedge.exe')])];
     if (!browsers.some(p => p && existsSync(p))) throw new Error('未找到 Chrome/Edge，请配置 GUIJI_CHROMIUM');
     console.log('本地配置、Node、FFmpeg、FFprobe、渲染依赖、浏览器检查通过');
-    if (config.publishMode === 'browser') console.log('发布浏览器固定为 Microsoft Edge：' + browserRuntime(root).executablePath);
+    if (config.publishMode === 'browser') console.log(config.browser.connectionMode==='existing' ? '发布浏览器：连接已有 Edge，地址 '+(config.browser.cdpEndpoint??'http://127.0.0.1:9222') : '发布浏览器固定为 Microsoft Edge：' + browserRuntime(root).executablePath);
     if (live) {
       if (config.publishMode === 'browser') {
         const release = acquireLock(root);
