@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { hasObject } from './catalog.mjs';
+import { hasObject, objectIds } from './catalog.mjs';
 
 export function loadEnv(path) {
   if (!existsSync(path)) return;
@@ -34,10 +34,14 @@ export function validateConfig(c) {
   }
   const v = c.video;
   if (!v || !Array.isArray(v.objects) || !v.objects.length || v.objects.some(o => !hasObject(o))) fail('objects 含有不支持的物品，请查阅 OBJECTS.md');
+  if (v.strategy !== undefined && !['cycle_all','cycle_selected','random'].includes(v.strategy)) fail('未知物品策略');
+  if (new Set(v.objects).size !== v.objects.length) fail('物品不能重复');
+  if (c.automation !== undefined && typeof c.automation.enabled !== 'boolean') fail('automation.enabled 应为布尔值');
   if (!Array.isArray(v.cuts) || !v.cuts.length || v.cuts.length > 6 || v.cuts.some((n, i) => !Number.isInteger(n) || n < 1 || n > 1000 || (i > 0 && n <= v.cuts[i - 1]))) fail('cuts 应为递增整数，范围 1–1000');
   if (!Array.isArray(v.seconds) || v.seconds.length !== v.cuts.length || v.seconds.some(n => !Number.isFinite(n) || n < 2 || n > 24) || v.seconds.reduce((a, b) => a + b, 0) < 3) fail('seconds 无效，视频总时长至少 3 秒');
   if (![360, 540, 720, 1080].includes(v.width) || ![24, 30, 60].includes(v.fps)) fail('width 或 fps 无效');
   if (typeof c.caption !== 'string' || c.caption.length > 2000) fail('caption 最多 2000 字符（为替换字段保留空间）');
+  for(const object of (v.strategy==='cycle_all'?objectIds:v.objects))if(c.caption.replaceAll('{object}',object).replaceAll('{cuts}',v.cuts.join(' / ')).length>2200)fail('替换后的文案超过 2200 字符');
   if (typeof c.shareToFeed !== 'boolean' || typeof c.isAiGenerated !== 'boolean') fail('shareToFeed / isAiGenerated 应为布尔值');
   return c;
 }
@@ -64,25 +68,50 @@ export class Store {
     this.db = new DatabaseSync(join(root, 'data', 'publisher.sqlite'));
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
       CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, scheduled TEXT UNIQUE NOT NULL, body TEXT NOT NULL);`);
+    this.db.exec('CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
   }
   all() { return this.db.prepare('SELECT body FROM jobs ORDER BY scheduled').all().map(r => JSON.parse(r.body)); }
   get(id) { const r = this.db.prepare('SELECT body FROM jobs WHERE id=?').get(id); return r && JSON.parse(r.body); }
   save(j) { this.db.prepare('INSERT INTO jobs VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET body=excluded.body').run(j.id, j.scheduled, JSON.stringify(j)); }
+  meta(key) { return this.db.prepare('SELECT value FROM metadata WHERE key=?').get(key)?.value; }
+  setMeta(key,value) { this.db.prepare('INSERT INTO metadata VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key,String(value)); }
   plan(c, now = new Date()) {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
     let count = 0;
+    const occupied=new Set(this.all().map(j=>j.scheduled));
+    const objects=c.video.strategy==='cycle_all' ? objectIds : c.video.objects;
+    const cycling=['cycle_all','cycle_selected'].includes(c.video.strategy);
+    const cycleKey='cycle.'+createHash('sha256').update(JSON.stringify(objects)).digest('hex').slice(0,16);
+    let cursor=Number(this.meta(cycleKey) ?? 0);
     for (const scheduled of slots(c, now)) {
-      const id = createHash('sha256').update(scheduled).digest('hex').slice(0, 16);
-      if (this.get(id)) continue;
+      if (occupied.has(scheduled)) continue;
+      const id = createHash('sha256').update(scheduled+(c.planRevision?'|'+c.planRevision:'')).digest('hex').slice(0, 16);
       const seed = parseInt(id.slice(0, 8), 16);
-      const object = c.video.objects[seed % c.video.objects.length];
-      const { objects, ...video } = c.video;
+      const object = objects[cycling ? cursor % objects.length : seed % objects.length];
+      const { objects: ignored, strategy, ...video } = c.video;
       const caption = c.caption.replaceAll('{object}', object).replaceAll('{cuts}', video.cuts.join(' / '));
       if (caption.length > 2200) throw new Error('替换字段后的 caption 超过 2200 字符');
       this.save({ id, scheduled, status: 'queued', video: { ...video, object, seed }, caption,
+        ...(cycling ? {cycleKey,cycleSequence:cursor++} : {}),
         shareToFeed: c.shareToFeed, isAiGenerated: c.isAiGenerated, attempts: 0 });
       count++;
     }
+    if(cycling)this.setMeta(cycleKey,cursor);
+    this.db.exec('COMMIT');
     return count;
+    } catch(error) { this.db.exec('ROLLBACK'); throw error; }
+  }
+  replaceFuture(now=new Date()) {
+    const all=this.all();
+    const removed=all.filter(j=>Date.parse(j.scheduled)>now.getTime() && ['queued','ready'].includes(j.status) && j.video && !j.containerId && !j.browserShareStartedAt);
+    const ids=new Set(removed.map(j=>j.id));
+    for(const key of new Set(removed.map(j=>j.cycleKey).filter(Boolean))) {
+      const first=Math.min(...removed.filter(j=>j.cycleKey===key).map(j=>j.cycleSequence));
+      if(!all.some(j=>!ids.has(j.id) && j.cycleKey===key && j.cycleSequence>=first))this.setMeta(key,first);
+    }
+    for(const j of removed)this.db.prepare('DELETE FROM jobs WHERE id=?').run(j.id);
+    return removed.length;
   }
   close() { this.db.close(); }
 }

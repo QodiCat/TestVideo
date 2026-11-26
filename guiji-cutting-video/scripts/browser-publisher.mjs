@@ -150,6 +150,9 @@ export class BrowserInstagram {
     return this.screenshot(job.id, 'preview');
   }
   async share() {
+    const { readFileSync } = await import('node:fs');
+    const configPath=join(this.root,'publisher.json');
+    if(existsSync(configPath) && JSON.parse(readFileSync(configPath,'utf8').replace(/^\uFEFF/,'')).automation?.enabled===false) { const error=new Error('自动发布已关闭');error.code='AUTOMATION_DISABLED';throw error; }
     await this.guard();
     this.stage = 'share';
     await this.shareButton.click();
@@ -179,6 +182,9 @@ export async function submitBrowserJob(job, store, browser) {
     job.status = 'published'; job.publishedAt = new Date().toISOString(); job.transport = 'browser';
     delete job.error; store.save(job);
   } catch (error) {
+    if(error.code==='AUTOMATION_DISABLED') {
+      job.status='ready';delete job.browserShareStartedAt;store.save(job);return;
+    }
     // Do not persist raw Playwright errors: they can include page content and session URLs.
     const uncertain = job.status === 'gui_publishing';
     job.errorStage = browser.stage ?? (uncertain ? 'share' : 'prepare');

@@ -8,6 +8,11 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { loadEnv, validateConfig, Store, acquireLock, Instagram, publishReady, reconcile } from './publisher-core.mjs';
 import { BrowserInstagram, browserRuntime, submitBrowserJob, retryBrowserJob, publishBrowserNow } from './browser-publisher.mjs';
 
+function automationAllowed() {
+  try { return JSON.parse(readFileSync(join(root,'publisher.json'),'utf8').replace(/^\uFEFF/,'')).automation?.enabled !== false; }
+  catch { return false; }
+}
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 loadEnv(join(root, '.env'));
 if (!process.env.GUIJI_CUTTING_DEPS && existsSync(join(root, '..', '.render-deps', 'node_modules'))) {
@@ -85,6 +90,7 @@ async function tick(config, store, api, prepareOnly = false) {
       }
       if (job.status === 'queued' && due - Date.now() <= config.schedule.renderAheadHours * 3600000) await render(job, store);
       if (prepareOnly || !api || Date.now() < due || job.status === 'queued') continue;
+      if(!automationAllowed()) { console.log('自动发布已关闭，保留已准备的视频。'); break; }
       if (api instanceof BrowserInstagram) {
         await submitBrowserJob(job, store, api);
         log(job.status, { id: job.id, stage: job.errorStage, screenshot: job.errorScreenshot ?? job.previewScreenshot });
@@ -106,6 +112,7 @@ async function tick(config, store, api, prepareOnly = false) {
       if (job.status === 'processing') {
         const result = await api.status(job.containerId);
         if (result.status_code === 'FINISHED') {
+          if(!automationAllowed())continue;
           await publishReady(job, store, api); log(job.status, { id: job.id, mediaId: job.mediaId });
         } else if (result.status_code === 'PUBLISHED') {
           job.status = 'published'; job.publishedAt = new Date().toISOString(); store.save(job);
@@ -184,13 +191,14 @@ async function main() {
   const store = new Store(root);
   try {
     if (command === 'browser-publish') {
+      if(!automationAllowed())throw new Error('自动发布已关闭，请在面板开启后再发布');
       if (config.publishMode !== 'browser') throw new Error('请将 publishMode 设为 browser');
       const browser = new BrowserInstagram(config, root);
       try {
         console.log('自动发布任务 ' + args[0] + '：上传、填写文案后直接点击分享，无需按 Enter。');
         const job = await publishBrowserNow(args[0], store, browser);
         log(job.status, { id: job.id, stage: job.errorStage, screenshot: job.errorScreenshot ?? job.previewScreenshot });
-        if (job.status !== 'published') throw new Error(job.error + '；截图：' + (job.errorScreenshot ?? '未保存'));
+        if (job.status !== 'published') throw new Error((job.error ?? '自动发布已关闭，任务保留为待发布状态') + '；截图：' + (job.errorScreenshot ?? '未保存'));
         console.log('发布成功：' + job.id);
       } finally { await browser.close(); }
     } else if (['browser-login', 'browser-preview'].includes(command)) {
@@ -246,6 +254,7 @@ async function main() {
     } else if (command === 'plan') {
       log('planned', { added: store.plan(config) });
     } else {
+      if(live && command==='run' && !automationAllowed()) { console.log('自动发布已关闭，请在面板开启。'); return; }
       const api = live && command === 'run' ? (config.publishMode === 'browser' ? new BrowserInstagram(config, root) : new Instagram(config)) : null;
       if (!api) console.log('试运行：只生成排期和视频，不调用发布接口。');
       let stop = false;

@@ -6,6 +6,7 @@
   "engines": { "node": ">=24.0.0" },
   "scripts": {
     "test": "node --test test/*.test.mjs",
+    "panel": "node scripts/panel.mjs",
     "objects": "node scripts/objects.mjs",
     "catalog:write": "node scripts/objects.mjs --write",
     "verify:catalog": "node scripts/verify-catalog.mjs",
